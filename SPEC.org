@@ -1,0 +1,75 @@
+#+title: nowplayd — normative spec
+#+author: golem
+#+startup: overview
+#+todo: DRAFT(d) PROPOSED(p) ACCEPTED(a) | IMPLEMENTED(i) DESCOPED(x)
+
+* Overview
+:PROPERTIES:
+:spec_status: draft
+:created: 2026-08-16
+:END:
+
+nowplayd is a standalone macOS daemon that bridges MPD to the system
+media layer. It is a peer MPD client — never a frontend plugin — so
+every MPD frontend (rmpc, ncmpcpp, euphonica, ...) benefits equally.
+
+Rationale: macOS media keys, Control Center, lock screen, and AirPods
+gestures are arbitrated by =mediaremoted=, which routes to whichever
+app registers via =MPNowPlayingInfoCenter= / =MPRemoteCommandCenter=.
+Terminal frontends structurally cannot register. MPD holds all
+playback state, so a small bridge daemon closes the gap for every
+frontend at once.
+
+* DRAFT Architecture
+:PROPERTIES:
+:spec_status: draft
+:END:
+
+** Core loop
+- Connect to MPD (default =localhost:6600=, configurable address
+  incl. unix sockets).
+- =idle player mixer options= for change notifications.
+- On change: =status= + =currentsong= (+ =albumart=/=readpicture=
+  for cover art) → publish to Now Playing.
+
+** Platform layer
+- =souvlaki= crate: wraps MPNowPlayingInfoCenter +
+  MPRemoteCommandCenter on macOS; MPRIS on Linux as a free side
+  effect.
+- Command handlers (play/pause/toggle/next/prev/seek) write MPD
+  commands back over a second connection or the idle connection
+  between waits.
+
+** Packaging
+- =LSUIElement= app bundle (no Dock icon) so Control Center displays
+  it properly; bare binaries register but present poorly.
+- =launchd= user agent for start-at-login + keep-alive.
+
+* PROPOSED Functional requirements
+:PROPERTIES:
+:spec_status: draft
+:END:
+To be cut into an AI-EPIC once accepted.
+
+- FR-1 :: Media keys / remote commands control MPD (toggle, next,
+  prev at minimum).
+- FR-2 :: Now Playing shows title/artist/album + elapsed/duration
+  with correct play/pause state.
+- FR-3 :: Album art published when MPD can serve it.
+- FR-4 :: Survives MPD restarts (reconnect with backoff); clears Now
+  Playing entry while disconnected.
+- FR-5 :: Configurable MPD address; sane zero-config default.
+- FR-6 :: launchd agent install path documented or automated.
+
+* Open questions
+- [ ] Does upstream rmpc's =rmpcd= plugin layer change anything for
+  us? (Check current upstream state; rmpcd is Lua-pluggable but
+  MPRIS/zbus-only today.)
+- [ ] Relationship to the user's rmpc fork — what did the fork
+  attempt, what carries over here? (Review pending.)
+- [ ] souvlaki: confirm it runs happily off an NSRunLoop in a
+  non-NSApplication daemon, or whether we need a minimal AppKit init.
+- [ ] Volume/seek commands in scope for v1 or descoped?
+
+* Descoped
+Self-contained scope for anything deferred lands here per repo rules.
