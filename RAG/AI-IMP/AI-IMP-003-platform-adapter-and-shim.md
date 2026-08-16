@@ -58,11 +58,13 @@ v1; the check result is reported in the submission).
 
 ### Files to Touch
 
-- `Cargo.toml`: `souvlaki = { git = "https://github.com/Sinono3/souvlaki",
-  rev = "436a5aedd85a755ba119916ba4504fb866803797",
-  default-features = false, features = ["use_zbus"] }` — the pin
-  defaults to `use_dbus`, so `default-features = false` is MANDATORY
-  or native libdbus stays enabled. `winit` 0.30 and `objc2` deps
+- `Cargo.toml`: `souvlaki = { git = "https://github.com/animegolem/souvlaki",
+  rev = "ba2bf7653ace6ae22880ee7eeed623fee938cacf",
+  default-features = false, features = ["use_zbus"] }` (rev 0.9 —
+  owned fork: upstream 436a5aed + the 3-line macOS compile fix,
+  §5.3) — the pin defaults to `use_dbus`, so
+  `default-features = false` is MANDATORY or native libdbus stays
+  enabled. `winit` 0.30 and `objc2` deps
   target-gated to macOS (Linux needs neither). Add `sync` to the
   tokio features (the winit-main / tokio-worker channel bridge needs
   it).

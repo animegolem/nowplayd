@@ -42,8 +42,8 @@ no-art explicitly (suppression — the adapter republishes metadata
 without artwork rather than leaving prior art). Skip refetch when
 the media key is unchanged (elapsed/state/occurrence changes never touch art — duplicate queue entries of one URI share art).
 
-Safety boundary per §5.3 rev 0.4: souvlaki pinned to git rev
-`436a5aed` (nil-image guard) — a durable write is NOT a decode
+Safety boundary per §5.3 rev 0.4: souvlaki pinned per §5.3 rev 0.9 (owned fork
+`ba2bf765`, nil-image guard + macOS compile fix) — a durable write is NOT a decode
 guarantee, so invalid-image fixture coverage is required, and cached
 reuse revalidates existence + decodability.
 

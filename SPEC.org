@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.8      | 2026-08-16   |
+| Draft  | 0.9      | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -208,9 +208,17 @@ showing for a song without art.
 
 Safety boundary (ruled rev 0.4, superseding the rev 0.3 claim that a
 verified-written file suffices — a durable file can still hold
-undecodable bytes): souvlaki is pinned to git revision
-=436a5aedd85a755ba119916ba4504fb866803797=, which contains the
-nil-image guard absent from released 0.8.3 (issue #77). Invalid-image
+undecodable bytes; PIN REPLACED rev 0.9): souvlaki is pinned to the
+nowplayd-owned fork =animegolem/souvlaki= revision
+=ba2bf7653ace6ae22880ee7eeed623fee938cacf=. History: rev 0.4 pinned
+upstream =436a5aed= for its nil-image guard, but that merge commit
+DOES NOT COMPILE on macOS (three stale Cocoa =nil= references over
+the raw-pointer backend, E0425; found live by the IMP-003 sitting,
+reproduced from a clean fetch). The fork commit is upstream
+=436a5aed= plus exactly the three-line raw-pointer fix
+(=is_null()= / =null_mut()=), verified compiling from a clean fetch.
+The same fix is offered upstream as Sinono3/souvlaki#79; if merged,
+a future revision may return the pin to upstream. Invalid-image
 fixture coverage is required at our boundary regardless. Cached-art
 reuse (e.g. on reconnect) verifies the cached path still exists and
 decodes; unchanged song identity alone is not sufficient.
@@ -363,6 +371,7 @@ Self-contained scope for deferred features:
 | 0.6 | 2026-08-16 | Sol round-1 on AI-IMP-002 accepted in full (claims verified: mpd_protocol 1.0.3 defaults to zero features, async gates AsyncConnection; local mpd 0.24.14 present, 6600 quiet): dependency line requires the async feature; song identity split into occurrence songid vs durable URI media key (§5.1.1) with duplicate-URI and restart fixtures, 004/005 consume the media key; refresh coherence contract — grouped command list + songid match validation, discard/retry (§5.1); real-MPD acceptance made reproducible via a self-contained isolated harness (own mpd, temp state, null output, runtime-generated silent fixtures, teardown on failure) — optional-gap wording removed; §6 blanket Wave-2 authorization replaced by per-ticket owner authorization; rev 0.5 equivalence ruling folded into §7 (quit-everything baseline retired). |
 | 0.7 | 2026-08-16 | Sol STOP-and-ask ruled (claim verified against mpd_protocol 1.0.3 source: instrument(skip(self)) records the Command arg, whose Debug renders password bytes): keep the crate and ordinary auth; the subscriber permanently disables the mpd_protocol tracing target with a sentinel-password capture test at maximum verbosity; app logs record auth success/failure only (§11 FR-7, IMP-006). Second STOP (transient tagless snapshot) withdrawn by Sol after self-falsification — 250 ms harness fixtures, not MPD; 5 s fixtures give 100/100; rev 0.6 acceptance stands. Record sync: §6 rev-0.4 gate wording marked historical; Cargo.lock added to IMP-002 scope. |
 | 0.8 | 2026-08-16 | Sol round-1 on AI-IMP-003 accepted in full (verified: pinned souvlaki defaults to use_dbus so default-features=false is mandatory with use_zbus; tokio lacks sync; CODE-LEAD charter forbids Code Lead touching HUMAN-TESTING): executable Cargo boundary (git pin + no-default-features + target-gated winit/objc2 + tokio sync + lockfile + lib.rs export); remote-command state loop — successful command → immediate coherent refresh → full publish, five-variant local enum fence (§5.2); clear() split from attachment lifetime — clear never detaches, every attach re-disables the position command, typed errors (§5.2); FR-8 interim seam: typed outcomes + stderr sink until IMP-006 swaps in tracing (§11); live gate scoped to M3 (artwork-phase elapsed check moved to IMP-004), temporary uncommitted dev bundle authorized for the live run, HUMAN-TESTING ownership returned to the Review Lead; multi-artist projection ruled (ordered join with "; ", empty → None) (§5.2). |
+| 0.9 | 2026-08-16 | Sol STOP ruled (failure reproduced from a clean fetch: pinned upstream 436a5aed fails E0425 on macOS — the nil-guard merge left stale Cocoa nil refs over the raw-pointer backend; a rev 0.4 verification gap: guard existence was checked, compilation was not). Owner authorized option 1: nowplayd-owned fork animegolem/souvlaki, single 3-line fix commit ba2bf765 (is_null/null_mut), verified compiling clean; pin replaced (§5.3, preserved reversal); same fix offered upstream as Sinono3/souvlaki#79 with possible future return to upstream. IMP-003/004 dependency lines updated. Process lesson recorded: dependency pins are verified by BUILD, not by source inspection alone. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
