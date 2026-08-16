@@ -1,4 +1,3 @@
-# AI-EPIC
 ---
 node_id: AI-EPIC-001
 tags:
