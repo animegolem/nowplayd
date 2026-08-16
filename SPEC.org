@@ -62,11 +62,20 @@ To be cut into an AI-EPIC once accepted.
 - FR-6 :: launchd agent install path documented or automated.
 
 * Open questions
-- [ ] Does upstream rmpc's =rmpcd= plugin layer change anything for
-  us? (Check current upstream state; rmpcd is Lua-pluggable but
-  MPRIS/zbus-only today.)
-- [ ] Relationship to the user's rmpc fork — what did the fork
-  attempt, what carries over here? (Review pending.)
+- [X] Does upstream rmpc's =rmpcd= plugin layer change anything for
+  us? — *Resolved 2026-08-16: no.* The Lua plugin API has full MPD
+  control + events, but no native-code ingress (no FFI, and
+  =process.spawn= is fire-and-forget with no IPC), so media-key
+  callbacks can't reach a plugin. rmpcd's own MPRIS is a native
+  module, not a plugin — platform integration lives below the plugin
+  line by design. Owner ruled: standalone daemon is the right shape,
+  in agreement with upstream's frontend/daemon philosophy (rmpc FAQ).
+  A future upstream PR (native =nowplaying= module via souvlaki) is
+  possible but not a goal.
+- [X] Relationship to the user's rmpc fork — *Resolved: none.* The
+  fork (deleted; recoverable from Linux machine) patched
+  scrollbar-gutter repaint and playing-row styling for the separate
+  RMPC-Auto-Theme project. Orthogonal to nowplayd.
 - [ ] souvlaki: confirm it runs happily off an NSRunLoop in a
   non-NSApplication daemon, or whether we need a minimal AppKit init.
 - [ ] Volume/seek commands in scope for v1 or descoped?
