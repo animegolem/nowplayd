@@ -60,7 +60,8 @@ Normative spec: `SPEC.org` (architecture, FRs, packaging).
 - With the daemon running and any frontend (or none), play/pause, next, and
   previous media keys control MPD with subjectively immediate response.
 - Control Center and lock screen show correct title/artist/album, elapsed
-  time, play state, and album art within 1 s of a song change.
+  time, and play state within 1 s of a song change; album art within the
+  SPEC.org §7 bound (3 s against the reference fixture).
 - Daemon survives an MPD restart without user intervention (reconnects with
   backoff; Now Playing entry clears while disconnected).
 - Installable from a clean clone via a documented one-command path (build +

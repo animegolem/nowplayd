@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.3      | 2026-08-16   |
+| Draft  | 0.4      | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -96,7 +96,7 @@ clients bundle the integration into the frontend).
 
 * 5. Architecture
 
-** 5.1 Connection model (ruled rev 0.3)
+** 5.1 Connection model (ruled rev 0.3; framing amended rev 0.4)
 TWO MPD connections: a dedicated idle listener (=idle player mixer
 options=) and a separate command/query connection for
 =status=/=currentsong=/artwork reads and command writes. This removes
@@ -105,10 +105,41 @@ reintroduce a single-connection model without amendment. Default
 address =localhost:6600=; unix sockets and password supported (§11
 FR-7).
 
+Wire framing is NOT hand-rolled (rev 0.4, Sol round-1 amendment 3):
+=mpd_protocol= 1.0.3 =AsyncConnection= owns greeting, escaping,
+OK/ACK, partial reads, and binary frames; =mpd_client= 1.4.1 typed
+=Command= definitions may be used on top, but its full =Client= loop
+(automatic idle/noidle) must not be, as it conflicts with this
+section. Project-local protocol code is limited to mapping
+framed/typed responses into =PlayerState= and project error types.
+
+Command-connection fairness (rev 0.4): the command/query connection
+owner yields between artwork chunks and services pending remote
+commands and state refreshes before the next art chunk; no exclusive
+borrow may span an entire art fetch.
+
 ** 5.2 Remote commands
 toggle/play/pause/next/previous handlers translate to MPD commands on
 the command connection. The macOS shim (§4) disables the playback
 position capability so no phantom scrubber is advertised (rev 0.3).
+
+Adapter publication contract (rev 0.4, verified against souvlaki
+source): souvlaki's macOS =set_metadata= builds a NEW dictionary and
+assigns it wholesale — it does not merge — so a metadata-only publish
+silently drops elapsed/playback keys. Therefore =publish= takes a
+coherent FULL =PlayerState= snapshot at the adapter boundary, and on
+macOS every metadata/artwork-phase publish restores playback state
+and elapsed position afterward. Call order is test-asserted.
+
+Clearing contract (rev 0.4): souvlaki's async artwork load applies
+only if its captured =GLOBAL_METADATA_COUNTER= still matches, and the
+native nil assignment does NOT advance that counter — so bare nil can
+be resurrected by an in-flight art load. =clear()= therefore first
+advances the generation (=set_metadata(MediaMetadata::default())=,
+which starts no new art work), THEN assigns nil. If the IMP-001 spike
+proves a better exact mechanism, that mechanism supersedes this
+sequence via ruling. A delayed-art fake test asserts clear cannot be
+followed by a stale publish.
 
 ** 5.3 Album art (amended rev 0.3)
 =albumart=/=readpicture= on song change only (skip refetch when the
@@ -116,9 +147,16 @@ song is unchanged). MPD returns bytes; souvlaki takes a cover URL, so
 the pipeline is: write bytes to a cache file ATOMICALLY (temp +
 rename), publish the file URL, and suppress stale art — never publish
 a URL before its bytes are durably written, never leave prior art
-showing for a song without art. Known upstream hazard: souvlaki
-0.8.3 has artwork-path panics (issue #77, unguarded unwraps); our
-pipeline only ever hands souvlaki a verified-written local file.
+showing for a song without art.
+
+Safety boundary (ruled rev 0.4, superseding the rev 0.3 claim that a
+verified-written file suffices — a durable file can still hold
+undecodable bytes): souvlaki is pinned to git revision
+=436a5aedd85a755ba119916ba4504fb866803797=, which contains the
+nil-image guard absent from released 0.8.3 (issue #77). Invalid-image
+fixture coverage is required at our boundary regardless. Cached-art
+reuse (e.g. on reconnect) verifies the cached path still exists and
+decodes; unchanged song identity alone is not sufficient.
 
 ** 5.4 Packaging
 =LSUIElement= app bundle (no Dock icon) so Control Center presents it
@@ -126,15 +164,44 @@ properly; launchd user agent for start-at-login/keep-alive. Install
 and update are idempotent; uninstall is documented (rev 0.3, §11
 FR-9).
 
+Logging (ruled rev 0.4): launchd's =StandardOutPath=/=StandardErrorPath=
+redirect only — launchd provides NO rotation. v1 ships documented
+unrotated file logging with a conservative default level; rotation or
+unified logging is future work (§9).
+
+** 5.5 Lifecycle failure matrix (added rev 0.4)
+
+Paired connection ownership: both connections are established and
+authenticated as one transaction; the daemon enters Connected only
+after both plus the initial full refresh succeed. Then:
+
+- Transport-level failure (EOF, I/O error, malformed protocol) on
+  EITHER role tears down both, clears Now Playing once, and begins
+  backoff.
+- MPD command-level ACK errors (no permission, no next song, …) log
+  the command failure but do NOT tear down a healthy pair and do NOT
+  clear.
+- Backoff resets only after a defined healthy interval (not on bare
+  socket handshake), so a flapping MPD cannot cycle at the 1 s floor.
+- Cache reuse on reconnect revalidates per §5.3.
+
+All four cases are covered by fake-connection lifecycle tests.
+
 * 6. Current slice
 
 AI-EPIC-001 (=RAG/AI-EPIC/AI-EPIC-001-mpd-macos-now-playing-bridge.md=)
-projecting §11 FR-1…FR-9. Ticket order per Sol pre-ticket review
-(accepted rev 0.3): (1) bundled windowless macOS vertical spike,
-(2) pure state model + MPD transport, (3) platform adapter with
-native clear + capability control, (4) artwork cache pipeline,
-(5) reconnect/shutdown lifecycle, (6) configuration, logging,
-installation, launchd hardening. IMPs not yet cut; awaiting owner go.
+projecting §11 FR-1…FR-9. AI-IMP-001…006 are CUT (owner go
+2026-08-16) in the rev 0.3 order and amended per Sol round-1
+(rev 0.4): (1) bundled windowless macOS vertical spike, (2) state
+model + MPD transport, (3) platform adapter + shim, (4) artwork
+cache, (5) lifecycle, (6) configuration/packaging.
+
+IMP-001 is a HARD ARCHITECTURE GATE (rev 0.4): its uncontested-
+baseline live matrix must PASS — the owner executes the human-test
+script, the Review Lead folds the result into §8, and only a passing
+ruling authorizes IMP-002 onward. Two sittings if the human gate
+cannot land inside one. The spike's arbitration-characterization runs
+are observational, not pass/fail.
 
 * 7. Acceptance criteria (amended rev 0.3)
 
@@ -151,16 +218,24 @@ installation, launchd hardening. IMPs not yet cut; awaiting owner go.
 - Clean-clone install via one documented command; survives
   logout/login; re-running install is a no-op; uninstall documented.
 - All three cargo gates pass.
-- Human-test scripts state competing-player preconditions (§4).
+- Human-test scripts state competing-player preconditions (§4), and
+  distinguish (rev 0.4) the UNCONTESTED BASELINE (no competing active
+  Now Playing session; mandatory pass) from ARBITRATION
+  CHARACTERIZATION runs (Music.app stopped/paused/playing before and
+  after activation; observational — record which source owns the
+  system controls and what transition regains ownership).
 
 * 8. Open questions
 
-- [X] souvlaki off an NSRunLoop in a non-NSApplication daemon —
-  *superseded rev 0.3* by the bundled vertical spike (§6 ticket 1):
-  souvlaki documents that macOS needs an AppDelegate/winit event
-  loop even windowless; Sol's local probe compiled and reached its
-  windowless winit loop on 0.8.3, but Control Center presentation
-  and command delivery remain UNVERIFIED until the spike passes.
+- [ ] souvlaki platform viability — OPEN until AI-IMP-001's live
+  result is folded (rev 0.4 corrects the premature =[X]= of rev 0.3).
+  Established so far (Sol probe, souvlaki 0.8.3 + winit 0.30.13):
+  winit runs on the main thread with no NSWindow and reaches
+  =ApplicationHandler::resumed=. NOT yet proven: Control Center
+  presentation, command callback delivery, bundle identity, launchd
+  behavior, clean shutdown. The winit-main / tokio-worker / channel
+  bridge is the hypothesis IMP-001 exists to prove, not evidence
+  IMP-003 may already cite.
 - [X] Config format — *ruled rev 0.3:* zero-config defaults; TOML
   file for persistent launchd use; environment overrides win for
   development/testing (§11 FR-7).
@@ -176,6 +251,15 @@ Self-contained scope for deferred features:
   never shows a scrubber that does nothing. Bringing seek into a
   later version means enabling the capability and wiring =seekcur=;
   the shim already owns the switch, so reversal cost is one module.
+- *Notarization / code-signing beyond ad-hoc* (deferred rev 0.4):
+  v1 installs locally from source; Homebrew formula, notarization,
+  and Developer ID signing are future distribution work. Scope when
+  taken up: signing identity in =build-bundle.sh=, notarytool
+  submission, stapling; no daemon code changes expected.
+- *Log rotation / unified logging* (deferred rev 0.4): v1 documents
+  bounded unrotated file logging (§5.4). Scope when taken up: either
+  =tracing-appender= rolling files or oslog integration; confined to
+  logging init in =main.rs=/config.
 - *Upstream PR to rmpcd* (declined as a goal, rev 0.2): a native
   souvlaki-based =nowplaying= module in rmpcd, sibling to its =mpris/=
   module, could subsume this project for rmpc users and replace its
@@ -190,6 +274,7 @@ Self-contained scope for deferred features:
 | 0.1 | 2026-08-16 | Project stood up. Standalone daemon; souvlaki; LSUIElement + launchd; seek/volume deferred. |
 | 0.2 | 2026-08-16 | Owner ruled: not an rmpcd plugin (no native ingress for media-key callbacks; plugins are event-consumer tier; rmpcd's own MPRIS is a native module). Old rmpc fork is orthogonal (theme rendering, separate project). Two-lead pattern installed; spec promoted to constitution, kept in org-mode per the org-for-specs move. |
 | 0.3 | 2026-08-16 | Sol pre-ticket review accepted in full, claims verified against souvlaki source: spike-first ticket order (§6); souvlaki + narrow macOS shim invariant (§4); scrubber disabled, seek stays deferred — option (a) (§9); two-connection MPD model (§5.1); atomic artwork cache pipeline (§5.3); split acceptance bounds + true-clearing criteria (§7); config ruled TOML+env (§8); FRs promoted into constitution as §11 with FR-8/FR-9 added; epic demoted to projection citing §11. |
+| 0.4 | 2026-08-16 | Sol round-1 (IMP-001…006) accepted in full, new claims verified against souvlaki source + crates.io: IMP-001 made a hard pass/fail architecture gate with uncontested-baseline vs arbitration-characterization matrix (§6, §7) and mandatory spike cleanup; adapter full-snapshot publication + generation-advancing clear() sequence (§5.2); wire framing via mpd_protocol 1.0.3 (+optional mpd_client 1.4.1 typed commands), hand-rolled framing declined (§5.1); artwork safety = pin souvlaki git 436a5ae (nil-image guard) + invalid-image fixtures + decode-validating cache reuse (§5.3); command-connection fairness during art reads (§5.1); lifecycle failure matrix (§5.5); dependency graph corrected (002 design-gated on 001; 005 and 006 depend on 004); §8 souvlaki item REOPENED (rev 0.3 closed it prematurely); notarization + log rotation descoped explicitly (§9); TOML password threat boundary (§11 FR-7); record synchronized with epic/tickets. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
@@ -218,7 +303,10 @@ Stable clauses; tickets and epics cite these, never redefine them.
   documented (with FR-9).
 - FR-7 :: Configuration: zero-config default; TOML config file for
   persistent use; environment variable overrides take precedence
-  (development/testing).
+  (development/testing). (Amended rev 0.4:) a TOML-stored MPD
+  password is a documented plaintext threat boundary — install/docs
+  require owner-only file permissions, and the value is redacted
+  from every log path.
 - FR-8 :: Observability: the daemon shall log non-secret startup
   configuration, connect/reconnect transitions, remote-command
   receipt and result, and artwork failures.

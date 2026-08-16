@@ -41,9 +41,17 @@ the platform adapter only after rename returns. On None, publish
 no-art explicitly (suppression — the adapter republishes metadata
 without artwork rather than leaving prior art). Skip refetch when
 song identity is unchanged (elapsed/state changes never touch art).
-Fetch runs on the command connection serialized behind state
-refreshes; a slow fetch must not delay metadata publishing (art
-follows in a second publish).
+
+Safety boundary per §5.3 rev 0.4: souvlaki pinned to git rev
+`436a5aed` (nil-image guard) — a durable write is NOT a decode
+guarantee, so invalid-image fixture coverage is required, and cached
+reuse revalidates existence + decodability.
+
+Command-connection fairness per §5.1 rev 0.4: the fetch never holds
+an exclusive command-connection borrow across the whole read — the
+owner yields between artwork chunks and services pending remote
+commands/state refreshes before the next chunk. A slow fetch must not
+delay metadata publishing (two-phase publish) NOR remote commands.
 
 ### Files to Touch
 
@@ -72,6 +80,13 @@ Before marking an item complete on the checklist MUST **stop** and
       adapter received a clear-art publish, not silence.
 - [ ] Metadata publish is never blocked behind art fetch (two-phase
       publish; test with delayed fake fetch).
+- [ ] Invalid-image fixture: corrupt/unsupported bytes are detected
+      at our boundary and never reach souvlaki as a published URL
+      (test asserts no-art publish instead).
+- [ ] Fairness: delayed multi-chunk fake test asserts a remote
+      command issued mid-fetch is serviced before the next art chunk.
+- [ ] Cache-reuse revalidation: missing or undecodable cached file →
+      refetch, not a stale publish (test).
 - [ ] Artwork failures logged (FR-8) and never fatal.
 - [ ] Live check appended to `RAG/HUMAN-TESTING.md`: fixture track
       art within 3 s; art-less track shows no stale art.

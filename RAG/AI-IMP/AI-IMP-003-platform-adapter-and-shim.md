@@ -37,19 +37,30 @@ HUMAN-TESTING.
 
 ### Design/Approach
 
-`src/platform/mod.rs`: trait-shaped adapter (`publish(state_change)`,
-`clear()`, command event stream) so the core stays platform-free;
-macOS impl `src/platform/macos/` wraps souvlaki (winit windowless
-loop per spike findings) and `src/platform/macos/shim.rs` holds the
-ONLY direct MediaPlayer calls, each cited to §4. Threading per spike:
-winit loop owns the main thread (macOS requirement); tokio runtime on
-a worker; command callbacks cross via channel. Linux leg: souvlaki
-MPRIS pass-through with no shim, compile-gated, CI-level only (§4).
+`src/platform/mod.rs`: trait-shaped adapter taking a coherent FULL
+`PlayerState` snapshot per §5.2 rev 0.4 (souvlaki's `set_metadata`
+replaces the whole dictionary — no merging; the core's change summary
+may optimize WHEN to publish, never WHAT), plus `clear()` and a
+command event stream. macOS impl `src/platform/macos/` wraps souvlaki
+(pinned git rev per §5.3) with the winit-main / tokio-worker /
+channel-bridge structure AS VERIFIED BY IMP-001 — that shape is the
+spike's hypothesis to prove, and this ticket consumes its recorded
+findings, adjusting if the spike proved otherwise.
+`src/platform/macos/shim.rs` holds the ONLY direct MediaPlayer calls,
+each cited to §4. `clear()` follows the §5.2 sequence: advance
+souvlaki's metadata generation (`set_metadata(default())`) THEN
+native nil — bare nil loses the race with in-flight artwork loads.
+Linux leg: souvlaki MPRIS pass-through with no shim, feature
+`use_zbus` (avoids the native libdbus build dependency), gate run
+locally via `rustup target add x86_64-unknown-linux-gnu` +
+`cargo check --target x86_64-unknown-linux-gnu` (no CI workflow in
+v1; the check result is reported in the submission).
 
 ### Files to Touch
 
-- `Cargo.toml`: souvlaki 0.8.3 (pinned), winit, objc2 deps
-  (target-gated).
+- `Cargo.toml`: souvlaki pinned to git rev
+  `436a5aedd85a755ba119916ba4504fb866803797` (nil-image guard, §5.3),
+  `use_zbus` feature; winit 0.30; objc2 deps (target-gated).
 - `src/platform/mod.rs`, `src/platform/macos/{mod.rs,shim.rs}`,
   `src/platform/linux.rs`: new.
 - `src/main.rs`: main-thread event loop restructure; wire adapter to
@@ -64,11 +75,14 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Platform trait + macOS adapter publishing metadata, play state,
-      and elapsed from `PlayerState` change summaries (minimal
-      updates: metadata-only change does not republish position).
-- [ ] `shim.rs`: nil `nowPlayingInfo` clear, exactly the spike's
-      verified surface; unit-testable behind a trait where possible.
+- [ ] Platform trait takes full `PlayerState` snapshots; macOS
+      adapter restores playback state + elapsed after every
+      `set_metadata`/artwork-phase publish (§5.2); spy test asserts
+      the call order.
+- [ ] `shim.rs`: `clear()` = generation-advancing
+      `set_metadata(default())` then native nil, exactly the spike's
+      verified surface; delayed-art fake test asserts a clear can
+      never be followed by a stale artwork publish.
 - [ ] `shim.rs`: `changePlaybackPositionCommand` disabled at attach;
       remains disabled after souvlaki re-attach if any.
 - [ ] Command events (toggle/play/pause/next/previous) forwarded to
@@ -76,8 +90,12 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] Main-thread ownership restructure: winit loop on main, tokio on
       worker, clean channel bridge; no busy-wait (§4 idle-CPU
       invariant).
-- [ ] Linux pass-through compiles (`cargo check
-      --target x86_64-unknown-linux-gnu` or CI equivalent recorded).
+- [ ] Linux pass-through (souvlaki `use_zbus` feature) compiles:
+      `cargo check --target x86_64-unknown-linux-gnu` run locally,
+      result reported in the submission.
+- [ ] Live check: elapsed position remains present in Control Center
+      after a metadata change and after the second-phase artwork
+      publish (queued to HUMAN-TESTING).
 - [ ] Live checks appended to `RAG/HUMAN-TESTING.md`: Control Center
       correctness, each key, no scrubber, competing-player
       preconditions.

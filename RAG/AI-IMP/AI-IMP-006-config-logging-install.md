@@ -6,7 +6,7 @@ tags:
   - packaging
   - config
 kanban_status: planned
-depends_on: [AI-IMP-001, AI-IMP-003, AI-IMP-005]
+depends_on: [AI-IMP-001, AI-IMP-003, AI-IMP-004, AI-IMP-005]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.75
 date_created: 2026-08-16
@@ -32,7 +32,10 @@ README documents all of it.
   (recorded in SPEC.org §9 as future work by the Review Lead if
   wanted).
 - Seek/volume config knobs (§9 defer stands).
-- Log rotation (launchd/os handles file targets; document only).
+- Log rotation (corrected rev 0.4: launchd's
+  `StandardOutPath`/`StandardErrorPath` redirect only and provide NO
+  rotation — v1 ships documented unrotated file logging per §5.4;
+  rotation/unified logging is §9 future work).
 
 ### Design/Approach
 
@@ -40,8 +43,12 @@ README documents all of it.
 (`~/.config/nowplayd/config.toml`) > defaults; keys: mpd address
 (tcp/unix), password, cache dir, log level/target. Secrets never
 logged (FR-8: log the source of each setting and non-secret values at
-startup). Logging via `tracing` with file target when run under
-launchd. `packaging/`: `Info.plist` template, `build-bundle.sh`
+startup). A TOML-stored password is a documented plaintext threat
+boundary (§11 FR-7 rev 0.4): README states it plainly, `install.sh`
+sets/verifies owner-only permissions (0600) on the config file, and
+the value is redacted from every log path. Logging via `tracing` with
+file target when run under launchd; README documents the unrotated-v1
+bound and log locations. `packaging/`: `Info.plist` template, `build-bundle.sh`
 (release build → `.app`), `install.sh` (build, copy to
 `~/Applications`, render launchd plist to
 `~/Library/LaunchAgents/dev.nowplayd.plist`, `launchctl bootstrap` —
@@ -78,8 +85,11 @@ Before marking an item complete on the checklist MUST **stop** and
       agent.
 - [ ] `uninstall.sh` removes bundle, agent, artwork cache; leaves
       config with printed notice; second run is a clean no-op.
-- [ ] README: quick start, config reference, update, uninstall,
-      troubleshooting (log locations).
+- [ ] Config file permissions: `install.sh` enforces 0600 when a
+      password is present; README documents the plaintext boundary.
+- [ ] README: quick start, config reference (incl. password threat
+      boundary), update, uninstall, troubleshooting (log locations,
+      unrotated-log note).
 - [ ] Live checks appended to `RAG/HUMAN-TESTING.md`: fresh install →
       working media keys; logout/login persistence; uninstall leaves
       no Now Playing entry and no agent.

@@ -78,25 +78,47 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] Bundle assembled by `spike/bundle.sh`; launches via
       `launchctl bootstrap gui/$UID` path.
 - [ ] Clean termination clears Now Playing.
-- [ ] Human-test script appended to `RAG/HUMAN-TESTING.md` incl.
-      competing-player preconditions (Music.app playing before/after).
+- [ ] Human-test script appended to `RAG/HUMAN-TESTING.md` with the
+      rev 0.4 split matrix: UNCONTESTED BASELINE (mandatory pass, no
+      competing Now Playing session) and ARBITRATION
+      CHARACTERIZATION (observational: Music.app stopped/paused/
+      playing before and after activation; record ownership and
+      regain transitions).
+- [ ] Spike seeded from Sol's probe (souvlaki 0.8.3 + winit 0.30.13,
+      `.inbox` attachment) rather than rediscovered.
+- [ ] Teardown path: `launchctl bootout` the spike job and remove
+      its bundle, plist, and log — the disposable experiment leaves
+      NO live agent behind (verified by re-listing launchd jobs).
 - [ ] Findings (what worked, what needed workarounds, exact objc2
       surface used) recorded in Issues Encountered for AI-IMP-003 to
-      consume.
+      consume; live result handed to Review Lead to fold into SPEC.org
+      §8 — a passing baseline ruling is the gate that authorizes
+      IMP-002 onward (§6).
 
 ### Acceptance Criteria
 
-**Scenario:** Spike bundle verified live by the owner.
+**Scenario 1 (uncontested baseline — MANDATORY PASS; failure fails
+the ticket and blocks IMP-002+ per §6):**
 **GIVEN** the assembled `.app` is loaded as a launchd user agent and
-Music.app is playing.
+NO other app holds an active Now Playing session.
 **WHEN** the owner opens Control Center media controls.
-**THEN** the spike's static track with artwork is presented (or the
-documented arbitration behavior vs Music.app is recorded).
-**WHEN** the owner presses each media key / control.
+**THEN** the spike's static track with artwork is presented.
+**WHEN** the owner exercises all five commands
+(toggle/play/pause/next/previous).
 **THEN** each callback appears in the log within 1 s and no scrubber
 is shown.
 **WHEN** the agent is booted out.
-**THEN** the Now Playing entry disappears entirely.
+**THEN** the Now Playing entry disappears entirely and teardown
+leaves no agent, bundle, plist, or log behind.
+
+**Scenario 2 (arbitration characterization — OBSERVATIONAL, cannot
+fail the ticket):**
+**GIVEN** Music.app stopped / paused / playing, before and after
+spike activation (each combination).
+**WHEN** the owner inspects system media controls.
+**THEN** which source owns them, and any transition needed for the
+spike to regain ownership, is recorded verbatim into Issues
+Encountered for the §8 fold.
 
 ### Issues Encountered
 

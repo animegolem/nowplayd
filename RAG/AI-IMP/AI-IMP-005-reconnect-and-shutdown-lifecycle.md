@@ -5,7 +5,7 @@ tags:
   - Implementation
   - lifecycle
 kanban_status: planned
-depends_on: [AI-IMP-002, AI-IMP-003]
+depends_on: [AI-IMP-002, AI-IMP-003, AI-IMP-004]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.8
 date_created: 2026-08-16
@@ -35,16 +35,23 @@ after daemon exit.
 
 ### Design/Approach
 
-`src/lifecycle.rs`: a small connection supervisor owning both MPD
-connections as a pair (a drop of either tears down and reconnects
-both — split-brain between idle and command connections is worse
-than a clean cycle). Backoff: 1 s doubling to 30 s cap, jittered,
-infinite; each transition logged (FR-8). On disconnect: `clear()`
-immediately. On reconnect: full state refresh + republish. No-song
-(`status` with no `currentsong`, e.g. cleared queue) → `clear()`
-while staying connected. Shutdown: SIGTERM/SIGINT handler (and winit
-exit path) runs `clear()` before process exit — coordinated with the
-main-thread event loop from AI-IMP-003.
+`src/lifecycle.rs`: a small connection supervisor implementing the
+§5.5 failure matrix (rev 0.4). Both connections are established and
+authenticated as ONE transaction; Connected is entered only after
+both plus the initial full refresh succeed. Error classification:
+transport-level failure (EOF/I-O/malformed protocol) on either role
+tears down both, clears once, and begins backoff; MPD command-level
+ACK errors log the failure but never tear down a healthy pair or
+clear. Backoff: 1 s doubling to 30 s cap, jittered, infinite —
+resetting only after a defined healthy interval (ruled: 30 s
+connected with a successful refresh), NOT on bare socket handshake,
+so a flapping MPD cannot cycle at the floor. On disconnect:
+`clear()` before the first backoff sleep. On reconnect: full state
+refresh + republish; cached-art reuse revalidates per §5.3 (exists +
+decodes), unchanged identity alone insufficient. No-song → `clear()`
+while staying connected. Shutdown: SIGTERM/SIGINT (and winit exit
+path) runs `clear()` before exit — coordinated with the main-thread
+event loop from AI-IMP-003.
 
 ### Files to Touch
 
@@ -65,16 +72,24 @@ Before marking an item complete on the checklist MUST **stop** and
 </CRITICAL_RULE>
 
 - [ ] Supervisor state machine (connected / reconnecting / shutting
-      down) with paired-connection teardown; unit tests with fake
-      connections for each transition.
+      down): paired transactional establish (no Connected until both
+      + initial refresh); unit tests with fake connections for each
+      transition.
+- [ ] Error classification tests: transport failure on either role →
+      teardown+clear+backoff; command ACK error → logged, pair stays
+      up, no clear.
 - [ ] Backoff 1 s → 30 s cap with jitter; test asserts the schedule
-      shape and reset-on-success.
+      shape AND that reset requires the 30 s healthy interval (a
+      connect-then-immediate-drop keeps escalating).
+- [ ] Reconnect cache reuse revalidates cached art (missing /
+      undecodable → refetch path from AI-IMP-004); fake test.
 - [ ] `clear()` on disconnect, before the first backoff sleep (test
       asserts ordering).
 - [ ] `clear()` on no-current-song while connected; republish on next
       song (fake-connection test).
 - [ ] Reconnect performs full refresh + republish incl. artwork
-      re-publish from cache (no refetch if identity unchanged).
+      re-publish from cache (identity unchanged AND revalidated per
+      §5.3; otherwise refetch).
 - [ ] SIGTERM/SIGINT → `clear()` → clean exit code 0; works under the
       winit main-thread structure.
 - [ ] All transitions logged with reason (FR-8).
