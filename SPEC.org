@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.2      | 2026-08-16   |
+| Draft  | 0.3      | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -35,7 +35,8 @@ ruled by this document.
 #    REVERSALS keep both markers so negative space is preserved.
 # 5. Constitutional sections — Core invariants (§4), Current slice
 #    (§6), Acceptance criteria (§7), Open questions (§8), Decision
-#    summary (§10) — stay mutually consistent on EVERY edit.
+#    summary (§10), Functional requirements (§11) — stay mutually
+#    consistent on EVERY edit.
 # 6. Keep the document convertible for humans (pandoc org → docx).
 
 * 1. Summary
@@ -60,82 +61,121 @@ clients bundle the integration into the frontend).
 
 ** 3.1 Goals
 - Hardware media keys and system surfaces control MPD.
-- Now Playing shows metadata + album art within 1 s of a change.
+- Now Playing shows metadata + album art promptly (bounds: §7).
 - Zero-config default; survives MPD restarts and login sessions.
 
 ** 3.2 Non-goals
 - Not an MPD frontend: no UI, no library browsing, no queue editing.
 - Not an rmpc/rmpcd plugin (rev 0.2 ruling, see §10).
 - No scrobbling, notifications, or theming — other tools own those.
-- Seek and volume remote commands: deferred, not v1 (see §9).
+- Seek and volume remote commands: deferred, not v1 (see §9). The
+  scrubber capability is actively disabled, not silently accepted
+  (rev 0.3, §9).
 
 * 4. Core invariants
 
 - Peer MPD client over the wire protocol; event-driven via =idle= —
   no polling loops, idle CPU near zero.
-- Platform layer via the =souvlaki= crate (macOS MediaPlayer, MPRIS
-  on Linux as a side effect). macOS-first; the Linux leg must keep
-  compiling but is CI-level validated only.
+- Platform layer (as amended rev 0.3): =souvlaki= PLUS the smallest
+  target-gated macOS shim needed for (a) true Now Playing clearing
+  (assigning nil to =nowPlayingInfo=, which souvlaki's public API
+  cannot do) and (b) remote-command capability control (disabling
+  =changePlaybackPositionCommand=, which souvlaki enables
+  unconditionally). No other direct MediaPlayer bindings without a
+  further amendment. Original rev 0.1 wording ("souvlaki is the only
+  platform-integration surface") is superseded by this clause.
+  MPRIS on Linux remains a side effect; that leg must keep compiling
+  but is CI-level validated only.
 - Single small binary; no runtime dependencies beyond MPD.
 - Rust 2024. Gates: =cargo build= / =cargo test= /
   =cargo clippy -- -D warnings=.
 - macOS media-layer behavior that cannot be validated headless is
-  flagged to =RAG/HUMAN-TESTING.md=, never claimed verified.
+  flagged to =RAG/HUMAN-TESTING.md=, never claimed verified. Human
+  tests must state preconditions for competing Now Playing sessions
+  (Music.app, Spotify) (rev 0.3).
 
 * 5. Architecture
 
-** 5.1 Core loop
-Connect to MPD (default =localhost:6600=; unix sockets and password
-supported, config file/env override). =idle player mixer options= for
-notifications; on change pull =status= + =currentsong= and publish.
+** 5.1 Connection model (ruled rev 0.3)
+TWO MPD connections: a dedicated idle listener (=idle player mixer
+options=) and a separate command/query connection for
+=status=/=currentsong=/artwork reads and command writes. This removes
+the =noidle= cancellation dance from the design; tickets must not
+reintroduce a single-connection model without amendment. Default
+address =localhost:6600=; unix sockets and password supported (§11
+FR-7).
 
 ** 5.2 Remote commands
-toggle/play/pause/next/previous handlers translate to MPD commands
-over a second connection (or between idle waits).
+toggle/play/pause/next/previous handlers translate to MPD commands on
+the command connection. The macOS shim (§4) disables the playback
+position capability so no phantom scrubber is advertised (rev 0.3).
 
-** 5.3 Album art
+** 5.3 Album art (amended rev 0.3)
 =albumart=/=readpicture= on song change only (skip refetch when the
-song is unchanged); published as Now Playing artwork.
+song is unchanged). MPD returns bytes; souvlaki takes a cover URL, so
+the pipeline is: write bytes to a cache file ATOMICALLY (temp +
+rename), publish the file URL, and suppress stale art — never publish
+a URL before its bytes are durably written, never leave prior art
+showing for a song without art. Known upstream hazard: souvlaki
+0.8.3 has artwork-path panics (issue #77, unguarded unwraps); our
+pipeline only ever hands souvlaki a verified-written local file.
 
 ** 5.4 Packaging
 =LSUIElement= app bundle (no Dock icon) so Control Center presents it
-properly; launchd user agent for start-at-login/keep-alive; install
-path documented or scripted.
+properly; launchd user agent for start-at-login/keep-alive. Install
+and update are idempotent; uninstall is documented (rev 0.3, §11
+FR-9).
 
 * 6. Current slice
 
-AI-EPIC-001 (=RAG/AI-EPIC/AI-EPIC-001-mpd-macos-now-playing-bridge.md=),
-FR-1…FR-7: idle loop, metadata publishing, remote commands, album
-art, reconnect lifecycle, packaging, config. IMP seams proposed but
-not spawned pending Review Lead round-1.
+AI-EPIC-001 (=RAG/AI-EPIC/AI-EPIC-001-mpd-macos-now-playing-bridge.md=)
+projecting §11 FR-1…FR-9. Ticket order per Sol pre-ticket review
+(accepted rev 0.3): (1) bundled windowless macOS vertical spike,
+(2) pure state model + MPD transport, (3) platform adapter with
+native clear + capability control, (4) artwork cache pipeline,
+(5) reconnect/shutdown lifecycle, (6) configuration, logging,
+installation, launchd hardening. IMPs not yet cut; awaiting owner go.
 
-* 7. Acceptance criteria
+* 7. Acceptance criteria (amended rev 0.3)
 
 - Media keys (toggle/next/prev) control MPD with subjectively
   immediate response, daemon running, any or no frontend open.
-- Control Center / lock screen correct within 1 s of song change,
-  including artwork.
-- MPD restart: automatic reconnect with backoff; Now Playing entry
-  cleared while disconnected.
+- Metadata and play/pause state correct in Control Center within
+  1 s of the MPD event.
+- Artwork correct within 3 s for the reference fixture: a JPEG
+  ≤ 1.5 MB at ≥ 1000×1000 embedded in the test track.
+- TRUE clearing (nil =nowPlayingInfo=): on MPD disconnect, on empty
+  queue/no current song, and on graceful daemon shutdown.
+- MPD restart: automatic reconnect with backoff; cleared while
+  disconnected.
 - Clean-clone install via one documented command; survives
-  logout/login.
+  logout/login; re-running install is a no-op; uninstall documented.
 - All three cargo gates pass.
+- Human-test scripts state competing-player preconditions (§4).
 
 * 8. Open questions
 
-- [ ] souvlaki: confirm it runs off an NSRunLoop in a
-  non-NSApplication daemon, or whether a minimal AppKit init is
-  needed. (Spike inside the souvlaki IMP.)
-- [ ] Config format: TOML vs env-only for v1.
+- [X] souvlaki off an NSRunLoop in a non-NSApplication daemon —
+  *superseded rev 0.3* by the bundled vertical spike (§6 ticket 1):
+  souvlaki documents that macOS needs an AppDelegate/winit event
+  loop even windowless; Sol's local probe compiled and reached its
+  windowless winit loop on 0.8.3, but Control Center presentation
+  and command delivery remain UNVERIFIED until the spike passes.
+- [X] Config format — *ruled rev 0.3:* zero-config defaults; TOML
+  file for persistent launchd use; environment overrides win for
+  development/testing (§11 FR-7).
 
 * 9. Descoped
 
 Self-contained scope for deferred features:
 
-- *Seek/volume remote commands* (deferred rev 0.1): souvlaki exposes
-  =seek= and position callbacks; MPD side is =seekcur= /=setvol=.
-  Adding them later touches only the command-handler module. Deferred
-  to keep v1 surface minimal.
+- *Seek/volume remote commands* (deferred rev 0.1; reaffirmed with
+  teeth rev 0.3): souvlaki exposes seek/position callbacks; MPD side
+  is =seekcur=/=setvol=. Ruling: option (a) of the Sol review — the
+  macOS shim DISABLES =changePlaybackPositionCommand= so the system
+  never shows a scrubber that does nothing. Bringing seek into a
+  later version means enabling the capability and wiring =seekcur=;
+  the shim already owns the switch, so reversal cost is one module.
 - *Upstream PR to rmpcd* (declined as a goal, rev 0.2): a native
   souvlaki-based =nowplaying= module in rmpcd, sibling to its =mpris/=
   module, could subsume this project for rmpc users and replace its
@@ -149,3 +189,39 @@ Self-contained scope for deferred features:
 |-----+------------+--------------------------------------------------------------------------------------------|
 | 0.1 | 2026-08-16 | Project stood up. Standalone daemon; souvlaki; LSUIElement + launchd; seek/volume deferred. |
 | 0.2 | 2026-08-16 | Owner ruled: not an rmpcd plugin (no native ingress for media-key callbacks; plugins are event-consumer tier; rmpcd's own MPRIS is a native module). Old rmpc fork is orthogonal (theme rendering, separate project). Two-lead pattern installed; spec promoted to constitution, kept in org-mode per the org-for-specs move. |
+| 0.3 | 2026-08-16 | Sol pre-ticket review accepted in full, claims verified against souvlaki source: spike-first ticket order (§6); souvlaki + narrow macOS shim invariant (§4); scrubber disabled, seek stays deferred — option (a) (§9); two-connection MPD model (§5.1); atomic artwork cache pipeline (§5.3); split acceptance bounds + true-clearing criteria (§7); config ruled TOML+env (§8); FRs promoted into constitution as §11 with FR-8/FR-9 added; epic demoted to projection citing §11. |
+
+* 11. Functional requirements (normative; added rev 0.3)
+
+Stable clauses; tickets and epics cite these, never redefine them.
+
+- FR-1 :: The daemon shall connect to MPD at a configurable address
+  (default =localhost:6600=, unix sockets supported) and track
+  playback via =idle player mixer options= on a dedicated idle
+  connection (§5.1).
+- FR-2 :: The daemon shall publish title, artist, album, duration,
+  elapsed position, and play/pause state to macOS Now Playing on
+  every relevant change, within the §7 bound.
+- FR-3 :: The daemon shall register handlers for
+  toggle/play/pause/next/previous remote commands, translate them to
+  MPD commands, and DISABLE the playback-position capability via the
+  §4 shim.
+- FR-4 :: The daemon shall fetch album art via
+  =albumart=/=readpicture=, publish it through the §5.3 atomic cache
+  pipeline, and skip refetch when the song is unchanged.
+- FR-5 :: The daemon shall truly clear Now Playing (nil
+  =nowPlayingInfo= via the §4 shim) on MPD disconnect, on no current
+  song, and on graceful shutdown; and shall reconnect with backoff
+  after connection loss.
+- FR-6 :: The project shall produce an =LSUIElement= app bundle and a
+  launchd user agent plist; install/update idempotent, uninstall
+  documented (with FR-9).
+- FR-7 :: Configuration: zero-config default; TOML config file for
+  persistent use; environment variable overrides take precedence
+  (development/testing).
+- FR-8 :: Observability: the daemon shall log non-secret startup
+  configuration, connect/reconnect transitions, remote-command
+  receipt and result, and artwork failures.
+- FR-9 :: Install/update shall be idempotent and uninstall shall be a
+  documented path that removes the bundle, the launchd agent, and
+  cached artwork.

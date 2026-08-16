@@ -71,24 +71,18 @@ Normative spec: `SPEC.org` (architecture, FRs, packaging).
 
 ### Functional Requirements
 
-- [ ] FR-1: The daemon shall connect to MPD at a configurable address
-  (default `localhost:6600`, unix sockets supported) and track playback via
-  `idle player mixer options`.
-- [ ] FR-2: The daemon shall publish title, artist, album, duration, elapsed
-  position, and play/pause state to macOS Now Playing on every relevant
-  change.
-- [ ] FR-3: The daemon shall register handlers for toggle/play/pause/next/
-  previous remote commands and translate them into MPD commands.
-- [ ] FR-4: The daemon shall fetch album art via `albumart`/`readpicture`
-  and publish it as Now Playing artwork, skipping refetch when the song has
-  not changed.
-- [ ] FR-5: The daemon shall reconnect with backoff when MPD restarts or the
-  connection drops, clearing the Now Playing entry while disconnected.
-- [ ] FR-6: The project shall produce an `LSUIElement` app bundle and a
-  launchd user agent plist, with an install path that is documented or
-  scripted.
-- [ ] FR-7: Configuration (MPD address, optional password) shall be readable
-  from a config file and/or environment with a zero-config default.
+Normative definitions live in SPEC.org §11 (rev 0.3); this epic is a
+projection and tracks completion only. Cite `SPEC.org §11 FR-n` in tickets.
+
+- [ ] FR-1: MPD connection + dedicated idle listener (§11 FR-1, §5.1).
+- [ ] FR-2: Metadata/state publishing within the §7 bound (§11 FR-2).
+- [ ] FR-3: Remote commands incl. disabled position capability (§11 FR-3).
+- [ ] FR-4: Artwork via the atomic cache pipeline (§11 FR-4, §5.3).
+- [ ] FR-5: True clearing + reconnect with backoff (§11 FR-5).
+- [ ] FR-6: Bundle + launchd agent, idempotent install (§11 FR-6).
+- [ ] FR-7: Config — zero-config default, TOML, env overrides (§11 FR-7).
+- [ ] FR-8: Observability logging (§11 FR-8).
+- [ ] FR-9: Idempotent install/update, documented uninstall (§11 FR-9).
 
 ### Non-Functional Requirements
 
@@ -105,7 +99,17 @@ Normative spec: `SPEC.org` (architecture, FRs, packaging).
 
 ## Implementation Breakdown
 
-_No AI-IMP tickets spawned yet. Proposed seams (pending owner/reviewer
-sign-off): (1) MPD client + idle loop, (2) souvlaki integration incl.
-NSRunLoop spike, (3) album art pipeline, (4) reconnect/lifecycle, (5) bundle +
-launchd packaging. Mostly sequential; single-agent chain expected._
+_No AI-IMP tickets spawned yet. Ticket order ruled at SPEC.org rev 0.3
+(Sol pre-ticket review accepted; original MPD-first seams superseded —
+platform risk retires first):_
+
+1. _Bundled windowless macOS vertical spike (disposable; LSUIElement +
+   launchd path, static metadata + artwork in Control Center, command
+   callbacks observed, true clearing on exit)._
+2. _Pure state model + MPD transport (two connections, §5.1)._
+3. _Platform adapter: native clear + command capability control (§4 shim)._
+4. _Artwork cache pipeline (§5.3)._
+5. _Reconnect + shutdown lifecycle._
+6. _Configuration, logging, installation, launchd hardening._
+
+_Awaiting owner go to cut AI-IMP-001…006._
