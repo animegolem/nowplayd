@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.nowplayd.spike</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/Nowplayd Spike.app/Contents/MacOS/nowplayd-spike</string>
+  </array>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/nowplayd-spike.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/nowplayd-spike.log</string>
+</dict>
+</plist>

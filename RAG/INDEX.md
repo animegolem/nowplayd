@@ -37,11 +37,13 @@ Git edit date so a second review can be judged.
 
 ### > 600 LOC
 
+- spike/Cargo.lock (2242 LOC)
 - RAG/scripts/carrier.py (1060 LOC)
 - RAG/scripts/generate-index.sh (661 LOC)
 
 ### > 300 LOC
 
+- spike/src/main.rs (320 LOC)
 - SPEC.org (315 LOC)
 
 ---

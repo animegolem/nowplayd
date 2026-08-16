@@ -1,0 +1,12 @@
+[package]
+name = "nowplayd-spike"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+objc2 = "=0.6.4"
+signal-hook = "=0.3.18"
+souvlaki = "=0.8.3"
+url = "=2.5.8"
+winit = "=0.30.13"
