@@ -48,7 +48,7 @@ connected with a successful refresh), NOT on bare socket handshake,
 so a flapping MPD cannot cycle at the floor. On disconnect:
 `clear()` before the first backoff sleep. On reconnect: full state
 refresh + republish; cached-art reuse revalidates per §5.3 (exists +
-decodes), unchanged identity alone insufficient. No-song → `clear()`
+decodes), unchanged MEDIA key (§5.1.1) alone insufficient — and queue songid must never be the reconnect comparison, it is not restart-durable. No-song → `clear()`
 while staying connected. Shutdown: SIGTERM/SIGINT (and winit exit
 path) runs `clear()` before exit — coordinated with the main-thread
 event loop from AI-IMP-003.
@@ -88,7 +88,7 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] `clear()` on no-current-song while connected; republish on next
       song (fake-connection test).
 - [ ] Reconnect performs full refresh + republish incl. artwork
-      re-publish from cache (identity unchanged AND revalidated per
+      re-publish from cache (media key unchanged AND revalidated per
       §5.3; otherwise refetch).
 - [ ] SIGTERM/SIGINT → `clear()` → clean exit code 0; works under the
       winit main-thread structure.

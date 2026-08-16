@@ -33,14 +33,14 @@ none (not the previous song's); unit tests cover the cache lifecycle.
 
 ### Design/Approach
 
-`src/artwork.rs`: on song-identity change (from the AI-IMP-002 change
+`src/artwork.rs`: on MEDIA-KEY change (SPEC.org §5.1.1; from the AI-IMP-002 change
 summary), fetch `albumart`, fall back to `readpicture`, else None.
 Write to cache dir (`~/Library/Caches/nowplayd/`) as temp file +
-atomic rename keyed by song identity hash; publish the file URL via
+atomic rename keyed by the §5.1.1 MEDIA key (URI hash — durable; queue songid is NOT durable and must not key the cache); publish the file URL via
 the platform adapter only after rename returns. On None, publish
 no-art explicitly (suppression — the adapter republishes metadata
 without artwork rather than leaving prior art). Skip refetch when
-song identity is unchanged (elapsed/state changes never touch art).
+the media key is unchanged (elapsed/state/occurrence changes never touch art — duplicate queue entries of one URI share art).
 
 Safety boundary per §5.3 rev 0.4: souvlaki pinned to git rev
 `436a5aed` (nil-image guard) — a durable write is NOT a decode
@@ -74,7 +74,7 @@ Before marking an item complete on the checklist MUST **stop** and
       typed errors; fixture tests incl. ACK ("no art") case.
 - [ ] Cache write is temp + rename in the same directory; test proves
       no partially-written file is ever at the published path.
-- [ ] Song-identity keying: unchanged song → zero fetches (test
+- [ ] Media-key keying (§5.1.1): unchanged media key → zero fetches, incl. the duplicate-URI occurrence-change case (test
       asserts fetch-count).
 - [ ] No-art songs: explicit art-less republish; test asserts the
       adapter received a clear-art publish, not silence.

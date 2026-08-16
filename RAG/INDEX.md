@@ -43,7 +43,7 @@ Git edit date so a second review can be judged.
 
 ### > 300 LOC
 
-- SPEC.org (334 LOC)
+- SPEC.org (376 LOC)
 - spike/src/main.rs (320 LOC)
 
 ---
