@@ -81,7 +81,8 @@ on failure.
 
 ### Files to Touch
 
-- `Cargo.toml`: tokio,
+- `Cargo.toml` and the tracked root `Cargo.lock` (regenerates with
+  the authorized dependency additions — in scope): tokio,
   `mpd_protocol = { version = "=1.0.3", features = ["async"] }`
   (crate has ZERO default features; `AsyncConnection` is gated
   behind `async` — exact pin retained); optionally

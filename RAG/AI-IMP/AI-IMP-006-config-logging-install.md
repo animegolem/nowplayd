@@ -78,6 +78,11 @@ Before marking an item complete on the checklist MUST **stop** and
       source (FR-8); asserted in a capture test.
 - [ ] `tracing` wired through mpd/platform/lifecycle modules; file
       target under launchd, stderr otherwise.
+- [ ] Credential fence (§11 FR-7 rev 0.7): the subscriber PERMANENTLY
+      disables the `mpd_protocol` tracing target — no env verbosity
+      may re-enable it; capture test proves a sentinel password never
+      appears at the most verbose permitted configuration; app logs
+      record auth success/failure only.
 - [ ] `build-bundle.sh` produces a valid LSUIElement `.app` from
       `cargo build --release`.
 - [ ] `install.sh` idempotent: second run changes nothing and says

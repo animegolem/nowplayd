@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.6      | 2026-08-16   |
+| Draft  | 0.7      | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -228,12 +228,12 @@ projecting §11 FR-1…FR-9. AI-IMP-001…006 are CUT (owner go
 model + MPD transport, (3) platform adapter + shim, (4) artwork
 cache, (5) lifecycle, (6) configuration/packaging.
 
-IMP-001 is a HARD ARCHITECTURE GATE (rev 0.4): its uncontested-
-baseline live matrix must PASS — the owner executes the human-test
-script, the Review Lead folds the result into §8, and only a passing
-ruling authorizes IMP-002 onward. Two sittings if the human gate
-cannot land inside one. The spike's arbitration-characterization runs
-are observational, not pass/fail.
+IMP-001 was a HARD ARCHITECTURE GATE (rev 0.4; wording preserved as
+history): its uncontested-baseline live matrix had to PASS before
+IMP-002 onward. NOTE (rev 0.7 sync): the uncontested-baseline
+REQUIREMENT was superseded at rev 0.5/0.6 by the concurrent-session
+equivalence ruling — §7 is normative; this paragraph is the preserved
+original ruling, not a live contract.
 
 GATE RESULT (rev 0.5): PASSED 2026-08-16 — §8 fold. AI-IMP-001
 completed and merged (3dd3940).
@@ -336,6 +336,7 @@ Self-contained scope for deferred features:
 | 0.4 | 2026-08-16 | Sol round-1 (IMP-001…006) accepted in full, new claims verified against souvlaki source + crates.io: IMP-001 made a hard pass/fail architecture gate with uncontested-baseline vs arbitration-characterization matrix (§6, §7) and mandatory spike cleanup; adapter full-snapshot publication + generation-advancing clear() sequence (§5.2); wire framing via mpd_protocol 1.0.3 (+optional mpd_client 1.4.1 typed commands), hand-rolled framing declined (§5.1); artwork safety = pin souvlaki git 436a5ae (nil-image guard) + invalid-image fixtures + decode-validating cache reuse (§5.3); command-connection fairness during art reads (§5.1); lifecycle failure matrix (§5.5); dependency graph corrected (002 design-gated on 001; 005 and 006 depend on 004); §8 souvlaki item REOPENED (rev 0.3 closed it prematurely); notarization + log rotation descoped explicitly (§9); TOML password threat boundary (§11 FR-7); record synchronized with epic/tickets. |
 | 0.5 | 2026-08-16 | AI-IMP-001 architecture gate PASSED live (owner-verified incl. visual clearing); §8 closed with the multi-session-picker finding (single-owner arbitration model superseded; no ownership-regain machinery needed in IMP-003); equivalence ruling: concurrent-session evidence supersedes the quit-everything baseline; operational notes recorded (handlers republish state; launchd bootout removal race ~5 s). Wave 2 authorized. |
 | 0.6 | 2026-08-16 | Sol round-1 on AI-IMP-002 accepted in full (claims verified: mpd_protocol 1.0.3 defaults to zero features, async gates AsyncConnection; local mpd 0.24.14 present, 6600 quiet): dependency line requires the async feature; song identity split into occurrence songid vs durable URI media key (§5.1.1) with duplicate-URI and restart fixtures, 004/005 consume the media key; refresh coherence contract — grouped command list + songid match validation, discard/retry (§5.1); real-MPD acceptance made reproducible via a self-contained isolated harness (own mpd, temp state, null output, runtime-generated silent fixtures, teardown on failure) — optional-gap wording removed; §6 blanket Wave-2 authorization replaced by per-ticket owner authorization; rev 0.5 equivalence ruling folded into §7 (quit-everything baseline retired). |
+| 0.7 | 2026-08-16 | Sol STOP-and-ask ruled (claim verified against mpd_protocol 1.0.3 source: instrument(skip(self)) records the Command arg, whose Debug renders password bytes): keep the crate and ordinary auth; the subscriber permanently disables the mpd_protocol tracing target with a sentinel-password capture test at maximum verbosity; app logs record auth success/failure only (§11 FR-7, IMP-006). Second STOP (transient tagless snapshot) withdrawn by Sol after self-falsification — 250 ms harness fixtures, not MPD; 5 s fixtures give 100/100; rev 0.6 acceptance stands. Record sync: §6 rev-0.4 gate wording marked historical; Cargo.lock added to IMP-002 scope. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
@@ -367,7 +368,17 @@ Stable clauses; tickets and epics cite these, never redefine them.
   (development/testing). (Amended rev 0.4:) a TOML-stored MPD
   password is a documented plaintext threat boundary — install/docs
   require owner-only file permissions, and the value is redacted
-  from every log path.
+  from every log path. (Amended rev 0.7 — verified: =mpd_protocol=
+  1.0.3 instruments =AsyncConnection::send/command= with
+  =tracing::instrument(skip(self))=, recording the =Command= via
+  Debug over its rendered bytes, i.e. =password <secret>=:) the
+  tracing subscriber PERMANENTLY disables the =mpd_protocol= target —
+  no environment verbosity setting, including the most verbose
+  permitted, may re-enable it; a capture test proves a sentinel
+  password never appears under that maximum configuration.
+  Application logs record authentication success/failure only, never
+  the command or credential. Authentication stays isolated in one
+  private helper with no command logging of its own.
 - FR-8 :: Observability: the daemon shall log non-secret startup
   configuration, connect/reconnect transitions, remote-command
   receipt and result, and artwork failures.
