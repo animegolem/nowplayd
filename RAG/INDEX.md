@@ -7,10 +7,10 @@
 | Status | EPICs | IMPs |
 |--------|-------|------|
 | In Progress | 1 | 0 |
-| Planned | 0 | 6 |
+| Planned | 0 | 5 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
-| Completed | 0 | 0 |
+| Completed | 0 | 1 |
 | **Total** | **1** | **6** |
 
 ## In Progress
@@ -19,7 +19,7 @@
 > macOS media keys, Control Center, the lock screen, and AirPods gestures are
 
 **IMPs:**
-- [[AI-IMP-001-macos-vertical-spike|IMP-001]] Macos vertical spike — planned
+- [[AI-IMP-001-macos-vertical-spike|IMP-001]] Macos vertical spike — completed
 - [[AI-IMP-002-state-model-and-mpd-transport|IMP-002]] State model and mpd transport — planned
 - [[AI-IMP-003-platform-adapter-and-shim|IMP-003]] Platform adapter and shim — planned
 - [[AI-IMP-004-artwork-cache-pipeline|IMP-004]] Artwork cache pipeline — planned
@@ -43,8 +43,8 @@ Git edit date so a second review can be judged.
 
 ### > 300 LOC
 
+- SPEC.org (334 LOC)
 - spike/src/main.rs (320 LOC)
-- SPEC.org (315 LOC)
 
 ---
 

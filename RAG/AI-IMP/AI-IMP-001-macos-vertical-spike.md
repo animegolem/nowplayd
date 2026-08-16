@@ -5,12 +5,12 @@ tags:
   - Implementation
   - spike
   - macos
-kanban_status: planned
+kanban_status: completed
 depends_on:
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.6
 date_created: 2026-08-16
-date_completed:
+date_completed: 2026-08-16
 ---
 
 # AI-IMP-001-macos-vertical-spike
@@ -77,8 +77,9 @@ Before marking an item complete on the checklist MUST **stop** and
       scrubber presented.
 - [x] Bundle assembled by `spike/bundle.sh`; launches via
       `launchctl bootstrap gui/$UID` path.
-- [ ] Clean termination clears Now Playing.
-- [ ] Human-test script appended to `RAG/HUMAN-TESTING.md` with the
+- [x] Clean termination clears Now Playing (native readback + owner
+      visual confirmation, 2026-08-16).
+- [x] Human-test script appended to `RAG/HUMAN-TESTING.md` with the
       rev 0.4 split matrix: UNCONTESTED BASELINE (mandatory pass, no
       competing Now Playing session) and ARBITRATION
       CHARACTERIZATION (observational: Music.app stopped/paused/

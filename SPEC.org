@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.4      | 2026-08-16   |
+| Draft  | 0.5      | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -45,7 +45,9 @@ nowplayd is a standalone Rust daemon that connects to MPD as a peer
 client — never a frontend plugin — and publishes playback state to
 macOS Now Playing (=MPNowPlayingInfoCenter=) while handling remote
 commands (=MPRemoteCommandCenter=). Every MPD frontend benefits
-equally. Repo scaffolded; implementation not started.
+equally. Status: platform architecture gate PASSED (rev 0.5, spike
+merged at =spike/=); production daemon implementation (Wave 2) is
+authorized and not yet started.
 
 * 2. Motivation
 
@@ -203,6 +205,10 @@ ruling authorizes IMP-002 onward. Two sittings if the human gate
 cannot land inside one. The spike's arbitration-characterization runs
 are observational, not pass/fail.
 
+GATE RESULT (rev 0.5): PASSED 2026-08-16 — §8 fold. AI-IMP-001
+completed and merged (3dd3940). Wave 2 (IMP-002…006 per the
+dependency graph) is AUTHORIZED.
+
 * 7. Acceptance criteria (amended rev 0.3)
 
 - Media keys (toggle/next/prev) control MPD with subjectively
@@ -227,15 +233,27 @@ are observational, not pass/fail.
 
 * 8. Open questions
 
-- [ ] souvlaki platform viability — OPEN until AI-IMP-001's live
-  result is folded (rev 0.4 corrects the premature =[X]= of rev 0.3).
-  Established so far (Sol probe, souvlaki 0.8.3 + winit 0.30.13):
-  winit runs on the main thread with no NSWindow and reaches
-  =ApplicationHandler::resumed=. NOT yet proven: Control Center
-  presentation, command callback delivery, bundle identity, launchd
-  behavior, clean shutdown. The winit-main / tokio-worker / channel
-  bridge is the hypothesis IMP-001 exists to prove, not evidence
-  IMP-003 may already cite.
+- [X] souvlaki platform viability — *CLOSED rev 0.5, AI-IMP-001 live
+  PASS (commit 3dd3940, owner-verified 2026-08-16).* Proven on the
+  shipping path (LSUIElement bundle via launchd, souvlaki 0.8.3 +
+  winit 0.30.13, windowless): Now Playing presentation with metadata
+  + artwork; all five command callbacks delivered (incl. pause→play
+  transitions once the handler republishes state — a logging-only
+  handler leaves macOS offering Pause forever); scrubber disable and
+  nil-clear via =objc2 msg_send= with native readback; true clearing
+  on SIGTERM, visually confirmed by the owner (card disappears).
+  ARCHITECTURE FINDING superseding the assumed single-owner model:
+  the modern macOS Now Playing surface is a MULTI-SESSION PICKER —
+  the spike appeared as a third concurrent card beside Firefox and an
+  AAC player, with commands routing correctly. IMP-003 needs no
+  ownership-regain machinery; equivalence ruling: this concurrent
+  evidence supersedes the artificial quit-everything baseline.
+  Operational notes for IMP-003/006: remote handlers must republish
+  Playing/Paused state; =launchctl= job removal has a short race
+  after bootout (poll up to ~5 s before asserting absence).
+  Residual observational item: Music.app arbitration
+  characterization remains queued in HUMAN-TESTING as optional
+  enrichment; it cannot fail anything.
 - [X] Config format — *ruled rev 0.3:* zero-config defaults; TOML
   file for persistent launchd use; environment overrides win for
   development/testing (§11 FR-7).
@@ -275,6 +293,7 @@ Self-contained scope for deferred features:
 | 0.2 | 2026-08-16 | Owner ruled: not an rmpcd plugin (no native ingress for media-key callbacks; plugins are event-consumer tier; rmpcd's own MPRIS is a native module). Old rmpc fork is orthogonal (theme rendering, separate project). Two-lead pattern installed; spec promoted to constitution, kept in org-mode per the org-for-specs move. |
 | 0.3 | 2026-08-16 | Sol pre-ticket review accepted in full, claims verified against souvlaki source: spike-first ticket order (§6); souvlaki + narrow macOS shim invariant (§4); scrubber disabled, seek stays deferred — option (a) (§9); two-connection MPD model (§5.1); atomic artwork cache pipeline (§5.3); split acceptance bounds + true-clearing criteria (§7); config ruled TOML+env (§8); FRs promoted into constitution as §11 with FR-8/FR-9 added; epic demoted to projection citing §11. |
 | 0.4 | 2026-08-16 | Sol round-1 (IMP-001…006) accepted in full, new claims verified against souvlaki source + crates.io: IMP-001 made a hard pass/fail architecture gate with uncontested-baseline vs arbitration-characterization matrix (§6, §7) and mandatory spike cleanup; adapter full-snapshot publication + generation-advancing clear() sequence (§5.2); wire framing via mpd_protocol 1.0.3 (+optional mpd_client 1.4.1 typed commands), hand-rolled framing declined (§5.1); artwork safety = pin souvlaki git 436a5ae (nil-image guard) + invalid-image fixtures + decode-validating cache reuse (§5.3); command-connection fairness during art reads (§5.1); lifecycle failure matrix (§5.5); dependency graph corrected (002 design-gated on 001; 005 and 006 depend on 004); §8 souvlaki item REOPENED (rev 0.3 closed it prematurely); notarization + log rotation descoped explicitly (§9); TOML password threat boundary (§11 FR-7); record synchronized with epic/tickets. |
+| 0.5 | 2026-08-16 | AI-IMP-001 architecture gate PASSED live (owner-verified incl. visual clearing); §8 closed with the multi-session-picker finding (single-owner arbitration model superseded; no ownership-regain machinery needed in IMP-003); equivalence ruling: concurrent-session evidence supersedes the quit-everything baseline; operational notes recorded (handlers republish state; launchd bootout removal race ~5 s). Wave 2 authorized. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
