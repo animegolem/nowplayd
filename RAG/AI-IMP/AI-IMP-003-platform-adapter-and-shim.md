@@ -5,7 +5,7 @@ tags:
   - Implementation
   - macos
   - shim
-kanban_status: planned
+kanban_status: in-progress
 depends_on: [AI-IMP-001, AI-IMP-002]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.7
@@ -89,52 +89,52 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Platform trait takes full `PlayerState` snapshots; macOS
+- [x] Platform trait takes full `PlayerState` snapshots; macOS
       adapter restores playback state + elapsed after every
       `set_metadata`/artwork-phase publish (§5.2); spy test asserts
       the call order.
-- [ ] `shim.rs`/adapter: `clear()` per §5.2 rev 0.8 — generation-
+- [x] `shim.rs`/adapter: `clear()` per §5.2 rev 0.8 — generation-
       advance then native nil, controls STAY ATTACHED (the spike's
       detach step is adapter-lifetime, not clear); typed errors, no
       `assert!`/`expect`; delayed-art fake test asserts a clear can
       never be followed by a stale artwork publish.
-- [ ] Attach contract: every attach = souvlaki attach → immediately
+- [x] Attach contract: every attach = souvlaki attach → immediately
       disable `changePlaybackPositionCommand`; spy asserts BOTH
       ordered sequences (attach and clear).
-- [ ] `shim.rs`: `changePlaybackPositionCommand` disabled at attach;
+- [x] `shim.rs`: `changePlaybackPositionCommand` disabled at attach;
       remains disabled after souvlaki re-attach if any.
-- [ ] Local command enum of EXACTLY toggle/play/pause/next/previous
+- [x] Local command enum of EXACTLY toggle/play/pause/next/previous
       (souvlaki seek/volume/stop events cannot leak); tests prove all
       five mappings.
-- [ ] Remote-command state loop per §5.2 rev 0.8: successful command
+- [x] Remote-command state loop per §5.2 rev 0.8: successful command
       → immediate coherent `refresh()` → FULL publish (never waiting
       on idle alone); ACK failure logged as failed result, no
       optimistic state; test asserts the success→refresh→publish
       order.
-- [ ] Receipt+result as TYPED outcomes; `main` emits via the current
+- [x] Receipt+result as TYPED outcomes; `main` emits via the current
       stderr record (FR-8 interim seam — IMP-006 swaps the sink to
       tracing); tests assert semantic outcomes, not stderr text.
-- [ ] Multi-artist projection per §5.2 rev 0.8: ordered join with
+- [x] Multi-artist projection per §5.2 rev 0.8: ordered join with
       `"; "`, empty → `None`; mapping test uses the two-artist
       fixture shape.
-- [ ] Main-thread ownership restructure: winit loop on main, tokio on
+- [x] Main-thread ownership restructure: winit loop on main, tokio on
       worker, clean channel bridge; no busy-wait (§4 idle-CPU
       invariant).
-- [ ] Command-role liveness per §5.1 rev 0.10: at-use staleness check
+- [x] Command-role liveness per §5.1 rev 0.10: at-use staleness check
       (50 s threshold) → ping-validate → reconnect+re-auth; transport
       fixture with test clock proves viability across a simulated
       timeout interval; idle future never cancelled.
-- [ ] Retry discipline: non-mutating ops retry once after reconnect;
+- [x] Retry discipline: non-mutating ops retry once after reconnect;
       MUTATING commands never blindly retried — double-execution
       guard test proves a failed `next` is logged as a failed result
       and not reissued.
-- [ ] Linux pass-through (souvlaki `use_zbus`, no default features)
+- [x] Linux pass-through (souvlaki `use_zbus`, no default features)
       compiles: run `rustup target add x86_64-unknown-linux-gnu`
       (target not presently installed), then
       `cargo check --target x86_64-unknown-linux-gnu`; exact command
       + result reported in the submission.
 
-- [ ] Live-check matrix PROPOSED IN THE SUBMISSION (per the
+- [x] Live-check matrix PROPOSED IN THE SUBMISSION (per the
       CODE-LEAD charter the Code Lead does not touch
       `RAG/HUMAN-TESTING.md`; the Review Lead appends the accepted
       matrix): live MPD metadata/playback after a metadata
@@ -143,11 +143,11 @@ Before marking an item complete on the checklist MUST **stop** and
       a QUIET SOAK exceeding 60 s of listening before a natural
       track transition (the rev 0.10 failure class).
       Artwork-phase elapsed-persistence check moved to AI-IMP-004.
-- [ ] Temporary UNCOMMITTED LSUIElement dev bundle (assembled from
+- [x] Temporary UNCOMMITTED LSUIElement dev bundle (assembled from
       the root release binary) authorized for the live run, with
       explicit teardown; a bare-binary presentation miss is NOT a
       platform failure; production installers stay in IMP-006.
-- [ ] Gates green; counts reported.
+- [x] Gates green; counts reported.
 
 ### Acceptance Criteria
 
@@ -171,3 +171,42 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- The constitutionally pinned upstream souvlaki revision failed its first real
+  macOS build with three unresolved `nil` references. Work stopped before any
+  dependency workaround; rev 0.9 replaced it with the owner-authorized
+  `animegolem/souvlaki@ba2bf765` fork containing only the three-line raw-pointer
+  correction. A clean Cargo fetch then compiled on macOS and Linux.
+- The Linux standard-library target was not installed at sitting start, as
+  predicted by round 1. `rustup target add x86_64-unknown-linux-gnu` succeeded,
+  followed by the exact cross-target check with `use_zbus` only.
+- A background launch directly from the shell was reaped with its terminal
+  process group. The authorized ad-hoc signed LSUIElement bundle stays alive
+  when started through macOS Launch Services; that is the owner live-gate path.
+- The first owner live run falsified the submission: MPD's default 60-second
+  connection timeout reaped the quiet command role, so the next natural track
+  transition exited the worker. Rev 0.10 assigned M3 a per-use 50-second
+  staleness check, ping validation, reconnect/re-auth, and asymmetric retry
+  discipline. The repair also isolates the idle waiter in its own task so
+  command-side work never cancels its in-flight protocol future.
+- The first delayed inspection of the clear hook found that native nil had
+  succeeded, but a later MPD/remote event performed another full publish and
+  recreated the card. The M3-only hook now latches publication off after clear,
+  leaving the adapter and remote controls attached while making the primitive's
+  persistent absence observable; production reconnect publication remains
+  owned by IMP-005 and is unchanged.
+- The owner completed the Control Center matrix under normal competing
+  sessions: correct title/artist/album/playback, no scrubber, UI and hardware
+  play/pause, next, previous, a quiet soak beyond 60 seconds followed by a
+  natural transition with the process surviving, and true clear. The latched
+  clear remained absent across two later MPD events while the process stayed
+  alive. One ambiguous observation had Firefox resume near the clear; M3's log
+  contained no play/toggle callback, IINA did not resume, and exact causality
+  could not be reconstructed. The owner ruled it non-blocking unless it recurs.
+- Teardown completed: the exact clear-test process was terminated, MPD was
+  restored to its prior paused state, and the temporary bundle was moved from
+  Applications to Trash (recoverable).
+- The exact repair gate passed at the rebased branch tip: 29 tests passed
+  (14 library, 14 protocol, 1 isolated-MPD smoke), 0 failed, 0 ignored;
+  clippy passed with warnings denied; the Linux cross-target check passed; and
+  ticket validation reported 8 files checked with 0 errors and 0 warnings.

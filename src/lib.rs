@@ -1,4 +1,5 @@
-//! Core state and MPD transport for nowplayd.
+//! Core state, MPD transport, and platform adapter for nowplayd.
 
 pub mod mpd;
+pub mod platform;
 pub mod state;

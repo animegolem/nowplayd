@@ -1,17 +1,45 @@
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use nowplayd::{
-    mpd::{BinaryCommand, CommandConnection, IdleConnection, MpdError, Subsystem},
+    mpd::{
+        BinaryCommand, CommandConnection, IdleConnection, LiveCommandConnection, LivenessClock,
+        MpdError, Subsystem,
+    },
+    platform::{CommandOutcome, RemoteCommand, WorkerEvent, handle_remote_command},
     state::{MediaKey, OccurrenceId, PlaybackState, PlayerState, SongMetadata},
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, DuplexStream, duplex},
     net::TcpListener,
+    time::timeout,
 };
 
 use nowplayd::mpd::{ConnectionConfig, MpdAddress};
 
 const REFRESH_REQUEST: &str = "command_list_ok_begin\nstatus\ncurrentsong\ncommand_list_end\n";
+
+#[derive(Clone)]
+struct TestClock(Arc<Mutex<Instant>>);
+
+impl TestClock {
+    fn new() -> Self {
+        Self(Arc::new(Mutex::new(Instant::now())))
+    }
+
+    fn advance(&self, duration: Duration) {
+        let mut now = self.0.lock().unwrap();
+        *now += duration;
+    }
+}
+
+impl LivenessClock for TestClock {
+    fn now(&self) -> Instant {
+        *self.0.lock().unwrap()
+    }
+}
 
 fn scripted_server(steps: Vec<(&'static str, &'static str)>) -> DuplexStream {
     let (client, server) = duplex(16 * 1024);
@@ -146,6 +174,61 @@ async fn command_ack_is_typed_and_does_not_become_transport_failure() {
 }
 
 #[tokio::test]
+async fn remote_bridge_maps_all_five_commands_and_refreshes_after_each() {
+    let io = scripted_server(vec![
+        ("pause\n", "OK\n"),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-playing.txt"),
+        ),
+        ("play\n", "OK\n"),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-playing.txt"),
+        ),
+        ("pause 1\n", "OK\n"),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-playing.txt"),
+        ),
+        ("next\n", "OK\n"),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-playing.txt"),
+        ),
+        ("previous\n", "OK\n"),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-playing.txt"),
+        ),
+    ]);
+    let mut connection = CommandConnection::from_io(io).await.unwrap();
+    let mut emitted = Vec::new();
+
+    for command in [
+        RemoteCommand::Toggle,
+        RemoteCommand::Play,
+        RemoteCommand::Pause,
+        RemoteCommand::Next,
+        RemoteCommand::Previous,
+    ] {
+        let refreshed = handle_remote_command(&mut connection, command, &mut |event| {
+            emitted.push(event);
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert_eq!(refreshed.unwrap().occurrence, Some(OccurrenceId(42)));
+    }
+
+    assert_eq!(
+        emitted.len(),
+        15,
+        "receipt, result, and publish per command"
+    );
+}
+
+#[tokio::test]
 async fn idle_role_sends_only_the_ruled_filter_and_maps_events() {
     let io = scripted_server(vec![(
         "idle player mixer options\n",
@@ -250,4 +333,120 @@ async fn idle_connection_drop_surfaces_as_transport_error() {
         connection.next_event().await.unwrap_err(),
         MpdError::Transport(_)
     ));
+}
+
+#[tokio::test]
+async fn stale_command_role_pings_then_reconnects_and_reauthenticates() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (first, _) = listener.accept().await.unwrap();
+        serve_script(
+            first,
+            vec![("password sentinel-secret\n", "OK\n"), ("ping\n", "")],
+        )
+        .await;
+
+        let (second, _) = listener.accept().await.unwrap();
+        serve_script(
+            second,
+            vec![
+                ("password sentinel-secret\n", "OK\n"),
+                (
+                    REFRESH_REQUEST,
+                    include_str!("fixtures/snapshot-playing.txt"),
+                ),
+            ],
+        )
+        .await;
+    });
+    let config = ConnectionConfig {
+        address: MpdAddress::Tcp(address.to_string()),
+        password: Some("sentinel-secret".into()),
+    };
+    let clock = TestClock::new();
+    let mut connection = LiveCommandConnection::connect_with_clock(config, clock.clone())
+        .await
+        .unwrap();
+
+    clock.advance(Duration::from_secs(51));
+    assert_eq!(
+        connection.refresh().await.unwrap().occurrence,
+        Some(OccurrenceId(42))
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn non_mutating_refresh_reconnects_and_retries_once() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (first, _) = listener.accept().await.unwrap();
+        serve_script(first, vec![(REFRESH_REQUEST, "")]).await;
+
+        let (second, _) = listener.accept().await.unwrap();
+        serve_script(
+            second,
+            vec![(
+                REFRESH_REQUEST,
+                include_str!("fixtures/snapshot-playing.txt"),
+            )],
+        )
+        .await;
+    });
+    let config = ConnectionConfig {
+        address: MpdAddress::Tcp(address.to_string()),
+        password: None,
+    };
+    let mut connection = LiveCommandConnection::connect(config).await.unwrap();
+
+    assert_eq!(
+        connection.refresh().await.unwrap().occurrence,
+        Some(OccurrenceId(42))
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn ambiguous_mutating_failure_is_logged_and_never_reissued() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (first, _) = listener.accept().await.unwrap();
+        serve_script(first, vec![("next\n", "")]).await;
+        timeout(Duration::from_millis(100), listener.accept())
+            .await
+            .is_ok()
+    });
+    let config = ConnectionConfig {
+        address: MpdAddress::Tcp(address.to_string()),
+        password: None,
+    };
+    let mut connection = LiveCommandConnection::connect(config).await.unwrap();
+    let mut emitted = Vec::new();
+
+    assert!(
+        handle_remote_command(&mut connection, RemoteCommand::Next, &mut |event| {
+            emitted.push(event);
+            Ok(())
+        })
+        .await
+        .unwrap()
+        .is_none()
+    );
+    assert_eq!(
+        emitted,
+        [
+            WorkerEvent::Command(CommandOutcome::Received(RemoteCommand::Next)),
+            WorkerEvent::Command(CommandOutcome::Failed {
+                command: RemoteCommand::Next,
+                error: "MPD transport error: IO error".into(),
+            }),
+        ]
+    );
+    assert!(
+        !server.await.unwrap(),
+        "a failed next must not reconnect and retry"
+    );
 }

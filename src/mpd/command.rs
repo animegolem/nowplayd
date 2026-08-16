@@ -88,6 +88,10 @@ where
         self.run(Command::new("previous")).await
     }
 
+    pub async fn ping(&mut self) -> Result<()> {
+        self.run(Command::new("ping")).await
+    }
+
     /// Read one MPD-managed chunk. Chunk scheduling belongs to AI-IMP-004.
     pub async fn read_binary(
         &mut self,

@@ -6,8 +6,8 @@
 
 | Status | EPICs | IMPs |
 |--------|-------|------|
-| In Progress | 1 | 0 |
-| Planned | 0 | 4 |
+| In Progress | 1 | 1 |
+| Planned | 0 | 3 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
 | Completed | 0 | 2 |
@@ -21,7 +21,7 @@
 **IMPs:**
 - [[AI-IMP-001-macos-vertical-spike|IMP-001]] Macos vertical spike — completed
 - [[AI-IMP-002-state-model-and-mpd-transport|IMP-002]] State model and mpd transport — completed
-- [[AI-IMP-003-platform-adapter-and-shim|IMP-003]] Platform adapter and shim — planned
+- [[AI-IMP-003-platform-adapter-and-shim|IMP-003]] Platform adapter and shim — in-progress
 - [[AI-IMP-004-artwork-cache-pipeline|IMP-004]] Artwork cache pipeline — planned
 - [[AI-IMP-005-reconnect-and-shutdown-lifecycle|IMP-005]] Reconnect and shutdown lifecycle — planned
 - [[AI-IMP-006-config-logging-install|IMP-006]] Config logging install — planned
@@ -37,6 +37,7 @@ Git edit date so a second review can be judged.
 
 ### > 600 LOC
 
+- Cargo.lock (2476 LOC)
 - spike/Cargo.lock (2242 LOC)
 - RAG/scripts/carrier.py (1060 LOC)
 - RAG/scripts/generate-index.sh (661 LOC)
@@ -44,7 +45,8 @@ Git edit date so a second review can be judged.
 ### > 300 LOC
 
 - SPEC.org (456 LOC)
-- Cargo.lock (365 LOC)
+- tests/proto.rs (452 LOC)
+- src/platform/mod.rs (390 LOC)
 - spike/src/main.rs (320 LOC)
 
 ---

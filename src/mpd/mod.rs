@@ -2,6 +2,7 @@
 
 mod command;
 mod idle;
+mod liveness;
 
 use std::{
     error::Error,
@@ -19,6 +20,7 @@ use tokio::{
 
 pub use command::{BinaryCommand, BinaryResponse, CommandConnection};
 pub use idle::{IdleConnection, Subsystem};
+pub use liveness::{LiveCommandConnection, LivenessClock, SystemClock};
 
 /// Address of an MPD daemon.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,6 +133,13 @@ impl Error for MpdError {
             Self::Transport(error) => Some(error),
             _ => None,
         }
+    }
+}
+
+impl MpdError {
+    /// Whether the operation lost or could not establish its transport.
+    pub fn is_transport(&self) -> bool {
+        matches!(self, Self::Transport(_))
     }
 }
 
