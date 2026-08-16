@@ -88,8 +88,11 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] Cache-reuse revalidation: missing or undecodable cached file →
       refetch, not a stale publish (test).
 - [ ] Artwork failures logged (FR-8) and never fatal.
-- [ ] Live check appended to `RAG/HUMAN-TESTING.md`: fixture track
-      art within 3 s; art-less track shows no stale art.
+- [ ] Live-check matrix proposed in the submission (Review Lead
+      appends to HUMAN-TESTING): fixture track art within 3 s;
+      art-less track shows no stale art; elapsed position remains
+      present after the second-phase artwork publish (moved here
+      from AI-IMP-003 at rev 0.8).
 - [ ] Gates green; counts reported.
 
 ### Acceptance Criteria

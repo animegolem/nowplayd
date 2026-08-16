@@ -58,14 +58,21 @@ v1; the check result is reported in the submission).
 
 ### Files to Touch
 
-- `Cargo.toml`: souvlaki pinned to git rev
-  `436a5aedd85a755ba119916ba4504fb866803797` (nil-image guard, §5.3),
-  `use_zbus` feature; winit 0.30; objc2 deps (target-gated).
+- `Cargo.toml`: `souvlaki = { git = "https://github.com/Sinono3/souvlaki",
+  rev = "436a5aedd85a755ba119916ba4504fb866803797",
+  default-features = false, features = ["use_zbus"] }` — the pin
+  defaults to `use_dbus`, so `default-features = false` is MANDATORY
+  or native libdbus stays enabled. `winit` 0.30 and `objc2` deps
+  target-gated to macOS (Linux needs neither). Add `sync` to the
+  tokio features (the winit-main / tokio-worker channel bridge needs
+  it).
+- Root `Cargo.lock`: in scope (git pin + zbus graph must lock).
+- `src/lib.rs`: export the new platform module.
 - `src/platform/mod.rs`, `src/platform/macos/{mod.rs,shim.rs}`,
   `src/platform/linux.rs`: new.
 - `src/main.rs`: main-thread event loop restructure; wire adapter to
   state changes and command events to `CommandConnection`.
-- `RAG/HUMAN-TESTING.md`: live checks.
+- (HUMAN-TESTING ownership: Review Lead only — matrix proposed in the submission.)
 
 ### Implementation Checklist
 
@@ -79,26 +86,50 @@ Before marking an item complete on the checklist MUST **stop** and
       adapter restores playback state + elapsed after every
       `set_metadata`/artwork-phase publish (§5.2); spy test asserts
       the call order.
-- [ ] `shim.rs`: `clear()` = generation-advancing
-      `set_metadata(default())` then native nil, exactly the spike's
-      verified surface; delayed-art fake test asserts a clear can
+- [ ] `shim.rs`/adapter: `clear()` per §5.2 rev 0.8 — generation-
+      advance then native nil, controls STAY ATTACHED (the spike's
+      detach step is adapter-lifetime, not clear); typed errors, no
+      `assert!`/`expect`; delayed-art fake test asserts a clear can
       never be followed by a stale artwork publish.
+- [ ] Attach contract: every attach = souvlaki attach → immediately
+      disable `changePlaybackPositionCommand`; spy asserts BOTH
+      ordered sequences (attach and clear).
 - [ ] `shim.rs`: `changePlaybackPositionCommand` disabled at attach;
       remains disabled after souvlaki re-attach if any.
-- [ ] Command events (toggle/play/pause/next/previous) forwarded to
-      MPD; each receipt+result logged (FR-8).
+- [ ] Local command enum of EXACTLY toggle/play/pause/next/previous
+      (souvlaki seek/volume/stop events cannot leak); tests prove all
+      five mappings.
+- [ ] Remote-command state loop per §5.2 rev 0.8: successful command
+      → immediate coherent `refresh()` → FULL publish (never waiting
+      on idle alone); ACK failure logged as failed result, no
+      optimistic state; test asserts the success→refresh→publish
+      order.
+- [ ] Receipt+result as TYPED outcomes; `main` emits via the current
+      stderr record (FR-8 interim seam — IMP-006 swaps the sink to
+      tracing); tests assert semantic outcomes, not stderr text.
+- [ ] Multi-artist projection per §5.2 rev 0.8: ordered join with
+      `"; "`, empty → `None`; mapping test uses the two-artist
+      fixture shape.
 - [ ] Main-thread ownership restructure: winit loop on main, tokio on
       worker, clean channel bridge; no busy-wait (§4 idle-CPU
       invariant).
-- [ ] Linux pass-through (souvlaki `use_zbus` feature) compiles:
-      `cargo check --target x86_64-unknown-linux-gnu` run locally,
-      result reported in the submission.
-- [ ] Live check: elapsed position remains present in Control Center
-      after a metadata change and after the second-phase artwork
-      publish (queued to HUMAN-TESTING).
-- [ ] Live checks appended to `RAG/HUMAN-TESTING.md`: Control Center
-      correctness, each key, no scrubber, competing-player
-      preconditions.
+- [ ] Linux pass-through (souvlaki `use_zbus`, no default features)
+      compiles: run `rustup target add x86_64-unknown-linux-gnu`
+      (target not presently installed), then
+      `cargo check --target x86_64-unknown-linux-gnu`; exact command
+      + result reported in the submission.
+
+- [ ] Live-check matrix PROPOSED IN THE SUBMISSION (per the
+      CODE-LEAD charter the Code Lead does not touch
+      `RAG/HUMAN-TESTING.md`; the Review Lead appends the accepted
+      matrix): live MPD metadata/playback after a metadata
+      transition, all five keys, no scrubber, true clear via the
+      adapter test hook — under NORMAL competing sessions (§7).
+      Artwork-phase elapsed-persistence check moved to AI-IMP-004.
+- [ ] Temporary UNCOMMITTED LSUIElement dev bundle (assembled from
+      the root release binary) authorized for the live run, with
+      explicit teardown; a bare-binary presentation miss is NOT a
+      platform failure; production installers stay in IMP-006.
 - [ ] Gates green; counts reported.
 
 ### Acceptance Criteria

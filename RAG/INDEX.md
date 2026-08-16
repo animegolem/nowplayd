@@ -43,7 +43,7 @@ Git edit date so a second review can be judged.
 
 ### > 300 LOC
 
-- SPEC.org (387 LOC)
+- SPEC.org (417 LOC)
 - Cargo.lock (365 LOC)
 - spike/src/main.rs (320 LOC)
 
