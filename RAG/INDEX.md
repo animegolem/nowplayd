@@ -7,9 +7,26 @@
 | Status | EPICs | IMPs |
 |--------|-------|------|
 | In Progress | 0 | 0 |
-| Planned | 0 | 0 |
+| Planned | 1 | 0 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
 | Completed | 0 | 0 |
-| **Total** | **0** | **0** |
+| **Total** | **1** | **0** |
+
+## Planned
+
+### [[AI-EPIC-001-mpd-macos-now-playing-bridge|EPIC-001: Mpd macos now playing bridge]]
+> macOS media keys, Control Center, the lock screen, and AirPods gestures are
+
+---
+
+## Size Watch
+
+Generated from tracked files; binary assets excluded.
+
+### > 300 LOC
+
+- RAG/scripts/generate-index.sh (575 LOC)
+
+---
 
