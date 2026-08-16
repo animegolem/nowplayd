@@ -1,0 +1,6 @@
+state: stop
+list_OK
+file: ghost.flac
+Title: Ghost
+list_OK
+OK

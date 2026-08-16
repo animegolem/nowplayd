@@ -1,0 +1,15 @@
+state: play
+songid: 42
+elapsed: 12.500
+duration: 180.250
+list_OK
+file: albums/example/track.flac
+Last-Modified: 2026-08-16T00:00:00Z
+Artist: First Artist
+Artist: Second Artist
+Album: Fixture Album
+Title: Fixture Title
+duration: 180.250
+Id: 42
+list_OK
+OK

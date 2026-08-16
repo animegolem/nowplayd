@@ -1,0 +1,13 @@
+state: play
+songid: 41
+elapsed: 179.900
+duration: 180.000
+list_OK
+file: albums/example/next.flac
+Artist: Artist
+Album: Album
+Title: Next
+duration: 200.000
+Id: 42
+list_OK
+OK

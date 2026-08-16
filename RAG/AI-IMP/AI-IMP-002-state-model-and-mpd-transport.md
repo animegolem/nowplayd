@@ -4,7 +4,7 @@ tags:
   - IMP-LIST
   - Implementation
   - mpd
-kanban_status: planned
+kanban_status: in-progress
 depends_on: [AI-IMP-001]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.85
@@ -107,37 +107,37 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] `PlayerState` with BOTH §5.1.1 identities + change-summary
+- [x] `PlayerState` with BOTH §5.1.1 identities + change-summary
       type; unit tests for metadata-only, playback-only, occurrence,
       and media-key transitions.
-- [ ] Identity fixtures per §5.1.1: duplicate queue entries sharing
+- [x] Identity fixtures per §5.1.1: duplicate queue entries sharing
       one URI (distinct occurrence, same media key); queue-id change
       across restart/reload (same media key, new occurrence).
-- [ ] Coherence contract: grouped `command_list_ok_begin` refresh
+- [x] Coherence contract: grouped `command_list_ok_begin` refresh
       with `status.songid` == `currentsong.Id` validation;
       fake/fixture test injects a transition between the reads and
       proves no mixed snapshot is ever emitted (discard+retry
       observed).
-- [ ] `mpd_protocol` 1.0.3 wired; response-to-`PlayerState` mapping
+- [x] `mpd_protocol` 1.0.3 wired; response-to-`PlayerState` mapping
       layer with fixture tests incl. an ACK error case (framing
       itself is the dependency's, untested here).
-- [ ] `src/lib.rs` exports modules; `tests/` imports compile.
-- [ ] `CommandConnection`: connect (tcp + unix), optional password,
+- [x] `src/lib.rs` exports modules; `tests/` imports compile.
+- [x] `CommandConnection`: connect (tcp + unix), optional password,
       `status`, `currentsong`, playback commands
       (toggle/play/pause/next/previous), binary read primitive; never
       sends `idle`.
-- [ ] `IdleConnection`: filtered `idle player mixer options` loop
+- [x] `IdleConnection`: filtered `idle player mixer options` loop
       yielding typed subsystem events; connection drop yields a typed
       error, no retry logic.
-- [ ] Wiring in `main.rs`: on idle event, refresh via command
+- [x] Wiring in `main.rs`: on idle event, refresh via command
       connection, log the change summary (FR-8 seed).
-- [ ] Isolated MPD smoke harness per Design: own mpd + temp state +
+- [x] Isolated MPD smoke harness per Design: own mpd + temp state +
       null output + reserved port/socket; runtime-generated silent
       WAV fixtures; `next` issued by its own second test client;
       asserts player event + coherent snapshot + change summary;
       cleans up even on failure. MANDATORY — run and counts reported
       in the submission.
-- [ ] Gates green: `cargo build`, `cargo test`,
+- [x] Gates green: `cargo build`, `cargo test`,
       `cargo clippy -- -D warnings`; counts reported in submission.
 
 ### Acceptance Criteria
@@ -166,3 +166,21 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- The pinned `mpd_protocol` command spans include rendered command bytes, so
+  password authentication would become log-visible once tracing is installed.
+  Work stopped for a ruling. SPEC rev 0.7 keeps ordinary authentication but
+  requires IMP-006 to permanently disable the dependency target. IMP-002 now
+  isolates authentication in one private helper, adds no command logging, and
+  installs no subscriber. `ConnectionConfig` also redacts its password in
+  `Debug` output.
+- Initial 250 ms generated WAV fixtures intermittently finished before the
+  post-`next` assertion. This was first reported as a possible MPD metadata
+  transition, then falsified: five-second silent fixtures remain only ~80 KiB
+  each and passed the exact one-event smoke gate 100/100 times without sleeps.
+  The correction was sent before changing the rev 0.6 acceptance contract.
+- The root `Cargo.lock` necessarily changed with the authorized dependencies;
+  the Review Lead folded it into Files to Touch at rev 0.7.
+- `mpc` became available locally during the sitting, but neither the harness
+  nor product code depends on it. The smoke client speaks through the pinned
+  protocol crate over its isolated Unix socket.
