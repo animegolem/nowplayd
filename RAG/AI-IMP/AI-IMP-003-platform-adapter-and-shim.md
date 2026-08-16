@@ -30,8 +30,13 @@ HUMAN-TESTING.
 ### Out of Scope
 
 - Artwork (AI-IMP-004): adapter publishes metadata with no art.
-- Reconnect/clear-on-disconnect policy (AI-IMP-005) — this ticket
-  provides the `clear()` primitive; lifecycle decides when.
+- Reconnect/clear-on-disconnect policy, backoff, and paired-teardown
+  supervision (AI-IMP-005) — this ticket provides the `clear()`
+  primitive; lifecycle decides when. (Amended rev 0.10:) M3 DOES own
+  COMMAND-ROLE LIVENESS per §5.1 rev 0.10 — the narrow per-use
+  staleness/ping/reconnect contract — because M3's acceptance
+  requires surviving an ordinary listening session; the supervisor
+  builds on top of it in IMP-005.
 - Bundle/launchd (AI-IMP-006); dev runs may use a bare binary with
   documented Control Center presentation caveats.
 
@@ -115,6 +120,14 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] Main-thread ownership restructure: winit loop on main, tokio on
       worker, clean channel bridge; no busy-wait (§4 idle-CPU
       invariant).
+- [ ] Command-role liveness per §5.1 rev 0.10: at-use staleness check
+      (50 s threshold) → ping-validate → reconnect+re-auth; transport
+      fixture with test clock proves viability across a simulated
+      timeout interval; idle future never cancelled.
+- [ ] Retry discipline: non-mutating ops retry once after reconnect;
+      MUTATING commands never blindly retried — double-execution
+      guard test proves a failed `next` is logged as a failed result
+      and not reissued.
 - [ ] Linux pass-through (souvlaki `use_zbus`, no default features)
       compiles: run `rustup target add x86_64-unknown-linux-gnu`
       (target not presently installed), then
@@ -126,7 +139,9 @@ Before marking an item complete on the checklist MUST **stop** and
       `RAG/HUMAN-TESTING.md`; the Review Lead appends the accepted
       matrix): live MPD metadata/playback after a metadata
       transition, all five keys, no scrubber, true clear via the
-      adapter test hook — under NORMAL competing sessions (§7).
+      adapter test hook — under NORMAL competing sessions (§7) — AND
+      a QUIET SOAK exceeding 60 s of listening before a natural
+      track transition (the rev 0.10 failure class).
       Artwork-phase elapsed-persistence check moved to AI-IMP-004.
 - [ ] Temporary UNCOMMITTED LSUIElement dev bundle (assembled from
       the root release binary) authorized for the live run, with

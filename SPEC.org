@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.9      | 2026-08-16   |
+| Draft  | 0.10     | 2026-08-16   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -120,6 +120,35 @@ Command-connection fairness (rev 0.4): the command/query connection
 owner yields between artwork chunks and services pending remote
 commands and state refreshes before the next art chunk; no exclusive
 borrow may span an entire art fetch.
+
+Command-role liveness (ruled rev 0.10 — found by the M3 live gate:
+MPD's default =connection_timeout= reaps inactive clients after 60 s
+while =idle= waiters are exempt, so the quiet command role dies
+between events): the command role is revalidated AT USE, entirely
+event-driven — no timers, preserving §4.
+
+- Staleness check: at each command-role operation, if the socket has
+  been quiet longer than a threshold below MPD's floor (50 s against
+  the 60 s default), first =ping=; on ping failure, reconnect (+
+  re-auth) before issuing the operation. A timestamp compared at use
+  time, never a scheduled wakeup.
+- Non-mutating operations (=ping=, =status=/=currentsong= refresh,
+  artwork reads) MAY reconnect-and-retry once on a transport error.
+- MUTATING remote commands are NEVER blindly retried after a
+  mid-flight transport error — the command may already have executed
+  (a retried =next= double-advances). The failure is logged as a
+  failed result, no state invented; the user presses the key again.
+- A failure surviving reconnect remains fatal-to-worker until
+  AI-IMP-005's supervisor exists; IMP-005 builds its paired-teardown
+  policy ON TOP of this per-use liveness primitive.
+- Tests: transport fixture with a test clock proving the command
+  role stays viable across a simulated timeout interval; a
+  double-execution guard test proving mutating commands are not
+  retried. The idle role's in-flight future is never cancelled by
+  liveness machinery.
+- Live acceptance for any ticket claiming song-transition behavior
+  must include a QUIET SOAK exceeding 60 s before a natural
+  transition — the class of failure fixtures cannot see.
 
 Refresh coherence (ruled rev 0.6): a state refresh must produce a
 COHERENT snapshot — never the new play state paired with the prior
@@ -372,6 +401,7 @@ Self-contained scope for deferred features:
 | 0.7 | 2026-08-16 | Sol STOP-and-ask ruled (claim verified against mpd_protocol 1.0.3 source: instrument(skip(self)) records the Command arg, whose Debug renders password bytes): keep the crate and ordinary auth; the subscriber permanently disables the mpd_protocol tracing target with a sentinel-password capture test at maximum verbosity; app logs record auth success/failure only (§11 FR-7, IMP-006). Second STOP (transient tagless snapshot) withdrawn by Sol after self-falsification — 250 ms harness fixtures, not MPD; 5 s fixtures give 100/100; rev 0.6 acceptance stands. Record sync: §6 rev-0.4 gate wording marked historical; Cargo.lock added to IMP-002 scope. |
 | 0.8 | 2026-08-16 | Sol round-1 on AI-IMP-003 accepted in full (verified: pinned souvlaki defaults to use_dbus so default-features=false is mandatory with use_zbus; tokio lacks sync; CODE-LEAD charter forbids Code Lead touching HUMAN-TESTING): executable Cargo boundary (git pin + no-default-features + target-gated winit/objc2 + tokio sync + lockfile + lib.rs export); remote-command state loop — successful command → immediate coherent refresh → full publish, five-variant local enum fence (§5.2); clear() split from attachment lifetime — clear never detaches, every attach re-disables the position command, typed errors (§5.2); FR-8 interim seam: typed outcomes + stderr sink until IMP-006 swaps in tracing (§11); live gate scoped to M3 (artwork-phase elapsed check moved to IMP-004), temporary uncommitted dev bundle authorized for the live run, HUMAN-TESTING ownership returned to the Review Lead; multi-artist projection ruled (ordered join with "; ", empty → None) (§5.2). |
 | 0.9 | 2026-08-16 | Sol STOP ruled (failure reproduced from a clean fetch: pinned upstream 436a5aed fails E0425 on macOS — the nil-guard merge left stale Cocoa nil refs over the raw-pointer backend; a rev 0.4 verification gap: guard existence was checked, compilation was not). Owner authorized option 1: nowplayd-owned fork animegolem/souvlaki, single 3-line fix commit ba2bf765 (is_null/null_mut), verified compiling clean; pin replaced (§5.3, preserved reversal); same fix offered upstream as Sinono3/souvlaki#79 with possible future return to upstream. IMP-003/004 dependency lines updated. Process lesson recorded: dependency pins are verified by BUILD, not by source inspection alone. |
+| 0.10 | 2026-08-16 | M3 live gate falsified the submission (correctly): the quiet command role dies at MPD's default 60 s connection_timeout (idle exempt) and the next natural transition hits a dead socket — a decomposition gap where no ticket owned command-role liveness. Ruled: event-driven per-use liveness contract (§5.1 rev 0.10) — staleness check + ping-validate + reconnect at use, retry-once for non-mutating ops only, mutating commands never blindly retried (double-execution hazard), idle future never cancelled; supervisor/backoff/clear remains IMP-005, built atop this primitive. IMP-003 amended to own it; live matrices must include a >60 s quiet soak before a natural transition. Submission returned for repair; resubmission reruns the full live matrix incl. soak. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
