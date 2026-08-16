@@ -10,7 +10,7 @@ tags:
 date_created: 2026-08-16
 date_completed:
 kanban_status: backlog
-AI_IMP_spawned: false
+ai_imp_spawned: false
 ---
 
 # AI-EPIC-001-mpd-macos-now-playing-bridge

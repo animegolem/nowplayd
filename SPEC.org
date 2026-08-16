@@ -1,84 +1,151 @@
-#+title: nowplayd — normative spec
+#+title: SPEC-nowplayd: nowplayd Constitution — MPD → macOS Now Playing bridge
 #+author: golem
 #+startup: overview
-#+todo: DRAFT(d) PROPOSED(p) ACCEPTED(a) | IMPLEMENTED(i) DESCOPED(x)
 
-* Overview
-:PROPERTIES:
-:spec_status: draft
-:created: 2026-08-16
-:END:
+This document rules the whole nowplayd project: design, scope, and
+acceptance. It is the ONE document all truth derives from.
 
-nowplayd is a standalone macOS daemon that bridges MPD to the system
-media layer. It is a peer MPD client — never a frontend plugin — so
-every MPD frontend (rmpc, ncmpcpp, euphonica, ...) benefits equally.
+| STATUS | REVISION | LAST UPDATED |
+|--------+----------+--------------|
+| Draft  | 0.2      | 2026-08-16   |
 
-Rationale: macOS media keys, Control Center, lock screen, and AirPods
-gestures are arbitrated by =mediaremoted=, which routes to whichever
-app registers via =MPNowPlayingInfoCenter= / =MPRemoteCommandCenter=.
-Terminal frontends structurally cannot register. MPD holds all
-playback state, so a small bridge daemon closes the gap for every
-frontend at once.
+#+begin_quote
+*WORKING PRODUCT STATEMENT*
 
-* DRAFT Architecture
-:PROPERTIES:
-:spec_status: draft
-:END:
+A standalone macOS daemon that mirrors MPD into the system media
+layer, so media keys, Control Center, the lock screen, and AirPods
+gestures control MPD and show the current track — regardless of which
+frontend (or none) is open.
+#+end_quote
 
-** Core loop
-- Connect to MPD (default =localhost:6600=, configurable address
-  incl. unix sockets).
-- =idle player mixer options= for change notifications.
-- On change: =status= + =currentsong= (+ =albumart=/=readpicture=
-  for cover art) → publish to Now Playing.
+*Decision scope:* everything about the daemon is ruled here. rmpc
+fork/theme work is a separate project (RMPC-Auto-Theme) and is not
+ruled by this document.
 
-** Platform layer
-- =souvlaki= crate: wraps MPNowPlayingInfoCenter +
-  MPRemoteCommandCenter on macOS; MPRIS on Linux as a free side
-  effect.
-- Command handlers (play/pause/toggle/next/prev/seek) write MPD
-  commands back over a second connection or the idle connection
-  between waits.
+# AMENDMENT COVENANT — the rules that make this document work:
+#
+# 1. This is the ONE document all truth derives from. Every accepted
+#    decision lives here, NOT in conversation history.
+# 2. Every edit bumps REVISION in the header table and updates LAST
+#    UPDATED.
+# 3. Sections are stable addresses. Tickets and briefs cite §N.M;
+#    never renumber existing sections — append instead. Deprecate in
+#    place rather than deleting.
+# 4. Rulings fold in with an inline revision marker: "(rev 0.NN)".
+#    REVERSALS keep both markers so negative space is preserved.
+# 5. Constitutional sections — Core invariants (§4), Current slice
+#    (§6), Acceptance criteria (§7), Open questions (§8), Decision
+#    summary (§10) — stay mutually consistent on EVERY edit.
+# 6. Keep the document convertible for humans (pandoc org → docx).
 
-** Packaging
-- =LSUIElement= app bundle (no Dock icon) so Control Center displays
-  it properly; bare binaries register but present poorly.
-- =launchd= user agent for start-at-login + keep-alive.
+* 1. Summary
 
-* PROPOSED Functional requirements
-:PROPERTIES:
-:spec_status: draft
-:END:
-To be cut into an AI-EPIC once accepted.
+nowplayd is a standalone Rust daemon that connects to MPD as a peer
+client — never a frontend plugin — and publishes playback state to
+macOS Now Playing (=MPNowPlayingInfoCenter=) while handling remote
+commands (=MPRemoteCommandCenter=). Every MPD frontend benefits
+equally. Repo scaffolded; implementation not started.
 
-- FR-1 :: Media keys / remote commands control MPD (toggle, next,
-  prev at minimum).
-- FR-2 :: Now Playing shows title/artist/album + elapsed/duration
-  with correct play/pause state.
-- FR-3 :: Album art published when MPD can serve it.
-- FR-4 :: Survives MPD restarts (reconnect with backoff); clears Now
-  Playing entry while disconnected.
-- FR-5 :: Configurable MPD address; sane zero-config default.
-- FR-6 :: launchd agent install path documented or automated.
+* 2. Motivation
 
-* Open questions
-- [X] Does upstream rmpc's =rmpcd= plugin layer change anything for
-  us? — *Resolved 2026-08-16: no.* The Lua plugin API has full MPD
-  control + events, but no native-code ingress (no FFI, and
-  =process.spawn= is fire-and-forget with no IPC), so media-key
-  callbacks can't reach a plugin. rmpcd's own MPRIS is a native
-  module, not a plugin — platform integration lives below the plugin
-  line by design. Owner ruled: standalone daemon is the right shape,
-  in agreement with upstream's frontend/daemon philosophy (rmpc FAQ).
-  A future upstream PR (native =nowplaying= module via souvlaki) is
-  possible but not a goal.
-- [X] Relationship to the user's rmpc fork — *Resolved: none.* The
-  fork (deleted; recoverable from Linux machine) patched
-  scrollbar-gutter repaint and playing-row styling for the separate
-  RMPC-Auto-Theme project. Orthogonal to nowplayd.
-- [ ] souvlaki: confirm it runs happily off an NSRunLoop in a
-  non-NSApplication daemon, or whether we need a minimal AppKit init.
-- [ ] Volume/seek commands in scope for v1 or descoped?
+macOS media keys, Control Center, lock screen, and AirPods gestures
+are arbitrated by =mediaremoted=, which routes only to apps registered
+through the MediaPlayer framework. Terminal frontends structurally
+cannot register. MPD holds all playback state, so a small bridge
+daemon closes the gap for every frontend at once. No modern standalone
+tool does this (osxmpdkeys is a 2012-era raw event tap; native GUI
+clients bundle the integration into the frontend).
 
-* Descoped
-Self-contained scope for anything deferred lands here per repo rules.
+* 3. Goals and non-goals
+
+** 3.1 Goals
+- Hardware media keys and system surfaces control MPD.
+- Now Playing shows metadata + album art within 1 s of a change.
+- Zero-config default; survives MPD restarts and login sessions.
+
+** 3.2 Non-goals
+- Not an MPD frontend: no UI, no library browsing, no queue editing.
+- Not an rmpc/rmpcd plugin (rev 0.2 ruling, see §10).
+- No scrobbling, notifications, or theming — other tools own those.
+- Seek and volume remote commands: deferred, not v1 (see §9).
+
+* 4. Core invariants
+
+- Peer MPD client over the wire protocol; event-driven via =idle= —
+  no polling loops, idle CPU near zero.
+- Platform layer via the =souvlaki= crate (macOS MediaPlayer, MPRIS
+  on Linux as a side effect). macOS-first; the Linux leg must keep
+  compiling but is CI-level validated only.
+- Single small binary; no runtime dependencies beyond MPD.
+- Rust 2024. Gates: =cargo build= / =cargo test= /
+  =cargo clippy -- -D warnings=.
+- macOS media-layer behavior that cannot be validated headless is
+  flagged to =RAG/HUMAN-TESTING.md=, never claimed verified.
+
+* 5. Architecture
+
+** 5.1 Core loop
+Connect to MPD (default =localhost:6600=; unix sockets and password
+supported, config file/env override). =idle player mixer options= for
+notifications; on change pull =status= + =currentsong= and publish.
+
+** 5.2 Remote commands
+toggle/play/pause/next/previous handlers translate to MPD commands
+over a second connection (or between idle waits).
+
+** 5.3 Album art
+=albumart=/=readpicture= on song change only (skip refetch when the
+song is unchanged); published as Now Playing artwork.
+
+** 5.4 Packaging
+=LSUIElement= app bundle (no Dock icon) so Control Center presents it
+properly; launchd user agent for start-at-login/keep-alive; install
+path documented or scripted.
+
+* 6. Current slice
+
+AI-EPIC-001 (=RAG/AI-EPIC/AI-EPIC-001-mpd-macos-now-playing-bridge.md=),
+FR-1…FR-7: idle loop, metadata publishing, remote commands, album
+art, reconnect lifecycle, packaging, config. IMP seams proposed but
+not spawned pending Review Lead round-1.
+
+* 7. Acceptance criteria
+
+- Media keys (toggle/next/prev) control MPD with subjectively
+  immediate response, daemon running, any or no frontend open.
+- Control Center / lock screen correct within 1 s of song change,
+  including artwork.
+- MPD restart: automatic reconnect with backoff; Now Playing entry
+  cleared while disconnected.
+- Clean-clone install via one documented command; survives
+  logout/login.
+- All three cargo gates pass.
+
+* 8. Open questions
+
+- [ ] souvlaki: confirm it runs off an NSRunLoop in a
+  non-NSApplication daemon, or whether a minimal AppKit init is
+  needed. (Spike inside the souvlaki IMP.)
+- [ ] Config format: TOML vs env-only for v1.
+
+* 9. Descoped
+
+Self-contained scope for deferred features:
+
+- *Seek/volume remote commands* (deferred rev 0.1): souvlaki exposes
+  =seek= and position callbacks; MPD side is =seekcur= /=setvol=.
+  Adding them later touches only the command-handler module. Deferred
+  to keep v1 surface minimal.
+- *Upstream PR to rmpcd* (declined as a goal, rev 0.2): a native
+  souvlaki-based =nowplaying= module in rmpcd, sibling to its =mpris/=
+  module, could subsume this project for rmpc users and replace its
+  zbus MPRIS with one cross-platform layer. Viable future
+  contribution; nowplayd standalone remains correct regardless since
+  it serves users with no rmpcd.
+
+* 10. Decision summary
+
+| rev | date       | ruling                                                                                     |
+|-----+------------+--------------------------------------------------------------------------------------------|
+| 0.1 | 2026-08-16 | Project stood up. Standalone daemon; souvlaki; LSUIElement + launchd; seek/volume deferred. |
+| 0.2 | 2026-08-16 | Owner ruled: not an rmpcd plugin (no native ingress for media-key callbacks; plugins are event-consumer tier; rmpcd's own MPRIS is a native module). Old rmpc fork is orthogonal (theme rendering, separate project). Two-lead pattern installed; spec promoted to constitution, kept in org-mode per the org-for-specs move. |

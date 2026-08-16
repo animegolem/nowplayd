@@ -1,4 +1,3 @@
-# AI-EPIC
 ---
 node_id:
 tags:
@@ -8,7 +7,7 @@ tags:
 date_created:
 date_completed:
 kanban_status:
-AI_IMP_spawned:
+ai_imp_spawned:
 ---
 
 <!--

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Generate RAG/INDEX.md from AI-EPIC and AI-IMP front matter.
+# Generate the ticket tree's INDEX.md from AI-EPIC and AI-IMP front matter.
 # Also normalizes field names and adds parent_epic backlinks.
 #
-# Usage: ./RAG/scripts/generate-index.sh
+# Usage: <ticket-root>/scripts/generate-index.sh
 
 set -euo pipefail
 
-RAG_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-INDEX_FILE="$RAG_DIR/INDEX.md"
+TICKETS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+INDEX_FILE=${INDEX_FILE:-"$TICKETS_DIR/INDEX.md"}
+LOC_REVIEW_FILE=${LOC_REVIEW_FILE:-"$TICKETS_DIR/.loc-reviews.tsv"}
 TODAY=$(date +%Y-%m-%d)
 
 # Use TAB as delimiter to avoid conflicts with | in wikilinks
@@ -32,11 +33,19 @@ trap 'rm -f "$EPICS_IN_PROGRESS" "$EPICS_PLANNED" "$EPICS_DEFERRED" "$EPICS_CANC
 # -----------------------------------------------------------------------------
 normalize_frontmatter() {
   local file="$1"
-  if grep -qE '^(kanban-status|close_date|created_date):' "$file" 2>/dev/null; then
+  local hits
+  hits=$(grep -oE '^(kanban-status|close_date|created_date):' "$file" 2>/dev/null \
+    | sed 's/:$//' | sort -u | paste -sd, -)
+  if [[ -n "$hits" ]]; then
     local tmp="${file}.tmp"
     sed -e 's/^kanban-status:/kanban_status:/' \
         -e 's/^close_date:/date_completed:/' \
         -e 's/^created_date:/date_created:/' "$file" > "$tmp" && mv "$tmp" "$file"
+    # Never silent: a generator that edits its inputs must say so.
+    # validate-tickets.sh flags these same fields as errors, and a
+    # silent patch here would starve that gate of exactly the
+    # defects it exists to catch (run order decided the behavior).
+    echo "[generate-index] NORMALIZED $file: deprecated field(s) $hits — validate-tickets.sh would have flagged these" >&2
   fi
 }
 
@@ -133,7 +142,7 @@ add_parent_epic_backlink() {
 
   # Find the full epic filename to create proper wikilink
   local epic_file
-  epic_file=$(find "$RAG_DIR/AI-EPIC" -maxdepth 1 -name "${epic_id}*.md" 2>/dev/null | head -1)
+  epic_file=$(find "$TICKETS_DIR/AI-EPIC" -maxdepth 1 -name "${epic_id}*.md" 2>/dev/null | head -1)
   local epic_basename
   if [[ -n "$epic_file" ]]; then
     epic_basename=$(basename "$epic_file" .md)
@@ -168,10 +177,10 @@ add_parent_epic_backlink() {
 # -----------------------------------------------------------------------------
 echo "[generate-index] Scanning AI-EPIC files..."
 
-if [[ ! -d "$RAG_DIR/AI-EPIC" ]]; then
+if [[ ! -d "$TICKETS_DIR/AI-EPIC" ]]; then
   echo "[generate-index] WARNING: AI-EPIC/ directory not found — skipping EPICs"
 else
-  for file in "$RAG_DIR/AI-EPIC"/*.md; do
+  for file in "$TICKETS_DIR/AI-EPIC"/*.md; do
     [[ -f "$file" ]] || continue
 
     filename=$(basename "$file" .md)
@@ -224,10 +233,10 @@ fi
 # -----------------------------------------------------------------------------
 echo "[generate-index] Scanning AI-IMP files..."
 
-if [[ ! -d "$RAG_DIR/AI-IMP" ]]; then
+if [[ ! -d "$TICKETS_DIR/AI-IMP" ]]; then
   echo "[generate-index] WARNING: AI-IMP/ directory not found — skipping IMPs"
 else
-  for file in "$RAG_DIR/AI-IMP"/*.md; do
+  for file in "$TICKETS_DIR/AI-IMP"/*.md; do
     [[ -f "$file" ]] || continue
 
     filename=$(basename "$file" .md)
@@ -268,7 +277,7 @@ else
       epic_num=$(echo "$parent_epic" | grep -oE '[0-9]+')
 
       # Find epic status
-      epic_file=$(find "$RAG_DIR/AI-EPIC" -maxdepth 1 -name "${parent_epic}*.md" 2>/dev/null | head -1)
+      epic_file=$(find "$TICKETS_DIR/AI-EPIC" -maxdepth 1 -name "${parent_epic}*.md" 2>/dev/null | head -1)
       if [[ -n "$epic_file" ]]; then
         epic_status=$(extract_frontmatter_field "$epic_file" "kanban_status")
         epic_status=$(echo "$epic_status" | tr '[:upper:]' '[:lower:]')
@@ -301,14 +310,76 @@ fi
 # -----------------------------------------------------------------------------
 echo "[generate-index] Scanning large files..."
 
-ROOT_DIR="$(cd "$RAG_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$TICKETS_DIR/.." && pwd)"
+INDEX_REL="${INDEX_FILE#"$ROOT_DIR"/}"  # repo-relative path of the generated index
+
+# -----------------------------------------------------------------------------
+# loc_review_suffix: Describe current review status for one Size Watch entry.
+# The exact content blob is authoritative; Git's last commit date is displayed
+# for context because filesystem mtimes change during checkout/install work.
+# -----------------------------------------------------------------------------
+loc_review_suffix() {
+  local file="$1"
+  local current_loc="$2"
+
+  [[ -f "$LOC_REVIEW_FILE" ]] || return 0
+
+  local record
+  record=$(awk -F '\t' -v path="$file" '$0 !~ /^#/ && $1 == path { print; exit }' "$LOC_REVIEW_FILE")
+  [[ -n "$record" ]] || return 0
+
+  local reviewed_path reviewed_at reviewed_commit reviewed_blob reviewed_loc review_ref review_note
+  # TAB is shell whitespace, so consecutive TABs would collapse and shift an
+  # optional empty review_ref into review_note. Translate to a non-whitespace
+  # separator before parsing to preserve empty columns.
+  record=${record//$'\t'/$'\x1f'}
+  IFS=$'\x1f' read -r reviewed_path reviewed_at reviewed_commit reviewed_blob reviewed_loc review_ref review_note <<< "$record"
+
+  if [[ -z "$reviewed_at" || -z "$reviewed_blob" || ! "$reviewed_loc" =~ ^[0-9]+$ ]]; then
+    echo "[generate-index] WARNING: invalid LOC review record for $file" >&2
+    return 0
+  fi
+
+  local current_blob last_edit delta delta_text state
+  current_blob=$(git -C "$ROOT_DIR" hash-object -- "$file")
+  if ! git -C "$ROOT_DIR" diff --quiet HEAD -- "$file"; then
+    last_edit="working tree"
+  else
+    last_edit=$(git -C "$ROOT_DIR" log -1 --format=%cI -- "$file")
+    [[ -n "$last_edit" ]] || last_edit="uncommitted"
+  fi
+
+  if [[ "$current_blob" == "$reviewed_blob" ]]; then
+    state="review current"
+    delta_text="unchanged"
+  else
+    state="review stale"
+    delta=$((current_loc - reviewed_loc))
+    if [[ "$delta" -gt 0 ]]; then
+      delta_text="+$delta LOC"
+    elif [[ "$delta" -lt 0 ]]; then
+      delta_text="$delta LOC"
+    else
+      delta_text="same LOC, content changed"
+    fi
+  fi
+
+  printf ' — %s: %s at %s LOC; %s; last edit %s' \
+    "$state" "$reviewed_at" "$reviewed_loc" "$delta_text" "$last_edit"
+  if [[ -n "${review_ref:-}" && "$review_ref" != "-" ]]; then
+    printf '; %s' "$review_ref"
+  fi
+  if [[ -n "${review_note:-}" && "$review_note" != "-" ]]; then
+    printf '; note: %s' "$review_note"
+  fi
+}
 
 while IFS= read -r -d '' file; do
   path="$ROOT_DIR/$file"
   [[ -f "$path" ]] || continue
 
   case "$file" in
-    RAG/INDEX.md|*/package-lock.json|package-lock.json|tauri-app/src-tauri/tests/fixtures/color_golden.json|*.png|*.jpg|*.jpeg|*.gif|*.svg|*.ico|*.bin|*.exe|*.dll|*.so|*.dylib|*.woff*|*.ttf|*.otf|*.pdf|*.mp4|*.mov|*.zip|*.tar*|*.gz|*.xz)
+    "$INDEX_REL"|*/package-lock.json|package-lock.json|*/fixtures/*.json|*.png|*.jpg|*.jpeg|*.gif|*.svg|*.ico|*.bin|*.exe|*.dll|*.so|*.dylib|*.woff*|*.ttf|*.otf|*.pdf|*.mp4|*.mov|*.zip|*.tar*|*.gz|*.xz)
       continue
       ;;
   esac
@@ -327,7 +398,7 @@ echo "[generate-index] Generating INDEX.md..."
 {
   cat <<EOF
 # Project Index
-> Auto-generated by \`RAG/scripts/generate-index.sh\`. Do not edit manually.
+> Auto-generated by \`scripts/generate-index.sh\` in the ticket tree. Do not edit manually.
 > Last updated: ${TODAY}
 
 EOF
@@ -516,14 +587,22 @@ EOF
   if [[ -s "$LARGE_FILES" ]]; then
     echo "## Size Watch"
     echo ""
-    echo "Generated from tracked files; binary assets excluded."
+    echo "Generated from tracked files; binary assets excluded. Review status"
+    echo "comes from \`.loc-reviews.tsv (in the ticket root)\`: \`review current\` means the exact"
+    echo "content blob is unchanged; \`review stale\` shows LOC drift and the latest"
+    echo "Git edit date so a second review can be judged."
     echo ""
 
     # Check if any files over 600
     if sort -rn "$LARGE_FILES" | awk -F '\t' '$1 > 600 { found=1 } END { exit !found }'; then
       echo "### > 600 LOC"
       echo ""
-      sort -rn "$LARGE_FILES" | awk -F '\t' '$1 > 600 { print "- " $2 " (" $1 " LOC)" }'
+      sort -rn "$LARGE_FILES" | while IFS=$'\t' read -r lines file; do
+        [[ "$lines" -gt 600 ]] || continue
+        printf -- '- %s (%s LOC)' "$file" "$lines"
+        loc_review_suffix "$file" "$lines"
+        printf '\n'
+      done
       echo ""
     fi
 
@@ -531,7 +610,12 @@ EOF
     if sort -rn "$LARGE_FILES" | awk -F '\t' '$1 > 300 && $1 <= 600 { found=1 } END { exit !found }'; then
       echo "### > 300 LOC"
       echo ""
-      sort -rn "$LARGE_FILES" | awk -F '\t' '$1 > 300 && $1 <= 600 { print "- " $2 " (" $1 " LOC)" }'
+      sort -rn "$LARGE_FILES" | while IFS=$'\t' read -r lines file; do
+        [[ "$lines" -gt 300 && "$lines" -le 600 ]] || continue
+        printf -- '- %s (%s LOC)' "$file" "$lines"
+        loc_review_suffix "$file" "$lines"
+        printf '\n'
+      done
       echo ""
     fi
 

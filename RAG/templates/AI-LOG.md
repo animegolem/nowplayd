@@ -5,7 +5,7 @@ tags:
   - development-summary
   - {dynamic-new-tags-as-required}
 closed_tickets: []
-created_date: {{date}}
+date_created: {{date}}
 related_files: []
 confidence_score:  
 ---
@@ -14,7 +14,7 @@ confidence_score:
 You MUST fill out the YAML Frontmatter in full.  
 Review the session history. You MUST identify all worked AI-IMP tickets. 
 Documentation SHOULD clearly identify the ticket the work is related to.  
-You major files edited in the session. You MAY use git to validate. 
+You MUST identify the major files edited in the session. You MAY use git to validate. 
 Provide your confidence in the accuracy and completeness of the generated log on a scale of 0.0 to 1.0. 
 Fill out all headings below. Remove bounded comments. 
 Be professional in the style of a corporate ticket. Be concise but complete.
