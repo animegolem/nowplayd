@@ -6,17 +6,25 @@
 
 | Status | EPICs | IMPs |
 |--------|-------|------|
-| In Progress | 0 | 0 |
-| Planned | 1 | 0 |
+| In Progress | 1 | 0 |
+| Planned | 0 | 6 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
 | Completed | 0 | 0 |
-| **Total** | **1** | **0** |
+| **Total** | **1** | **6** |
 
-## Planned
+## In Progress
 
 ### [[AI-EPIC-001-mpd-macos-now-playing-bridge|EPIC-001: Mpd macos now playing bridge]]
 > macOS media keys, Control Center, the lock screen, and AirPods gestures are
+
+**IMPs:**
+- [[AI-IMP-001-macos-vertical-spike|IMP-001]] Macos vertical spike — planned
+- [[AI-IMP-002-state-model-and-mpd-transport|IMP-002]] State model and mpd transport — planned
+- [[AI-IMP-003-platform-adapter-and-shim|IMP-003]] Platform adapter and shim — planned
+- [[AI-IMP-004-artwork-cache-pipeline|IMP-004]] Artwork cache pipeline — planned
+- [[AI-IMP-005-reconnect-and-shutdown-lifecycle|IMP-005]] Reconnect and shutdown lifecycle — planned
+- [[AI-IMP-006-config-logging-install|IMP-006]] Config logging install — planned
 
 ---
 

@@ -8,8 +8,8 @@ tags:
   - media-keys
 date_created: 2026-08-16
 date_completed:
-kanban_status: backlog
-ai_imp_spawned: false
+kanban_status: in-progress
+ai_imp_spawned: true
 ---
 
 # AI-EPIC-001-mpd-macos-now-playing-bridge
@@ -99,17 +99,14 @@ projection and tracks completion only. Cite `SPEC.org §11 FR-n` in tickets.
 
 ## Implementation Breakdown
 
-_No AI-IMP tickets spawned yet. Ticket order ruled at SPEC.org rev 0.3
-(Sol pre-ticket review accepted; original MPD-first seams superseded —
-platform risk retires first):_
+Cut 2026-08-16 (owner go given; order ruled at SPEC.org rev 0.3, Sol
+pre-ticket review — platform risk retires first). All await round-1
+pre-implementation review; every confidence_score is below the 0.9
+skip threshold except none, so round-1 is universal.
 
-1. _Bundled windowless macOS vertical spike (disposable; LSUIElement +
-   launchd path, static metadata + artwork in Control Center, command
-   callbacks observed, true clearing on exit)._
-2. _Pure state model + MPD transport (two connections, §5.1)._
-3. _Platform adapter: native clear + command capability control (§4 shim)._
-4. _Artwork cache pipeline (§5.3)._
-5. _Reconnect + shutdown lifecycle._
-6. _Configuration, logging, installation, launchd hardening._
-
-_Awaiting owner go to cut AI-IMP-001…006._
+- AI-IMP-001 — bundled windowless macOS vertical spike (disposable). FR feasibility for FR-2/3/5 clearing/capability claims.
+- AI-IMP-002 — pure state model + two-connection MPD transport (FR-1, data half of FR-2).
+- AI-IMP-003 — platform adapter + §4 shim: native clear, scrubber disabled, commands → MPD (FR-2, FR-3). Depends: 001, 002.
+- AI-IMP-004 — atomic artwork cache pipeline (FR-4). Depends: 002, 003.
+- AI-IMP-005 — reconnect + shutdown lifecycle, true clearing policy (FR-5). Depends: 002, 003.
+- AI-IMP-006 — config, logging, bundle, idempotent install/uninstall (FR-6..FR-9). Depends: 001, 003, 005.
