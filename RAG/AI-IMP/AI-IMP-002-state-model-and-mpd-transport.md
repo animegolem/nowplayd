@@ -4,12 +4,12 @@ tags:
   - IMP-LIST
   - Implementation
   - mpd
-kanban_status: in-progress
+kanban_status: completed
 depends_on: [AI-IMP-001]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.85
 date_created: 2026-08-16
-date_completed:
+date_completed: 2026-08-16
 ---
 
 # AI-IMP-002-state-model-and-mpd-transport

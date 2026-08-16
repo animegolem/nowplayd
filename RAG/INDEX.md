@@ -6,11 +6,11 @@
 
 | Status | EPICs | IMPs |
 |--------|-------|------|
-| In Progress | 1 | 1 |
+| In Progress | 1 | 0 |
 | Planned | 0 | 4 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
-| Completed | 0 | 1 |
+| Completed | 0 | 2 |
 | **Total** | **1** | **6** |
 
 ## In Progress
@@ -20,7 +20,7 @@
 
 **IMPs:**
 - [[AI-IMP-001-macos-vertical-spike|IMP-001]] Macos vertical spike — completed
-- [[AI-IMP-002-state-model-and-mpd-transport|IMP-002]] State model and mpd transport — in-progress
+- [[AI-IMP-002-state-model-and-mpd-transport|IMP-002]] State model and mpd transport — completed
 - [[AI-IMP-003-platform-adapter-and-shim|IMP-003]] Platform adapter and shim — planned
 - [[AI-IMP-004-artwork-cache-pipeline|IMP-004]] Artwork cache pipeline — planned
 - [[AI-IMP-005-reconnect-and-shutdown-lifecycle|IMP-005]] Reconnect and shutdown lifecycle — planned
