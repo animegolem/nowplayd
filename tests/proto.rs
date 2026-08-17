@@ -221,11 +221,7 @@ async fn remote_bridge_maps_all_five_commands_and_refreshes_after_each() {
         assert_eq!(refreshed.unwrap().occurrence, Some(OccurrenceId(42)));
     }
 
-    assert_eq!(
-        emitted.len(),
-        15,
-        "receipt, result, and publish per command"
-    );
+    assert_eq!(emitted.len(), 10, "receipt and result per command");
 }
 
 #[tokio::test]

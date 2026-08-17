@@ -6,6 +6,7 @@ use souvlaki::{MediaControlEvent, MediaMetadata, MediaPlayback, MediaPosition};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
+    artwork::ArtworkPublication,
     mpd::{CommandConnection, LiveCommandConnection, LivenessClock, MpdError},
     state::{PlaybackState, PlayerState},
 };
@@ -56,7 +57,7 @@ pub enum CommandOutcome {
 /// Events sent from the Tokio worker to the platform owner.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkerEvent {
-    Publish(PlayerState),
+    Publish(ArtworkPublication),
     Command(CommandOutcome),
     ClearForTest,
     Fatal(String),
@@ -91,8 +92,9 @@ pub struct PlatformSnapshot {
     pub playback: MediaPlayback,
 }
 
-impl From<&PlayerState> for PlatformSnapshot {
-    fn from(state: &PlayerState) -> Self {
+impl From<&ArtworkPublication> for PlatformSnapshot {
+    fn from(publication: &ArtworkPublication) -> Self {
+        let state = &publication.state;
         let artist =
             (!state.metadata.artists.is_empty()).then(|| state.metadata.artists.join("; "));
         let progress = state.elapsed.map(MediaPosition);
@@ -108,7 +110,7 @@ impl From<&PlayerState> for PlatformSnapshot {
                 artist,
                 album: state.metadata.album.clone(),
                 duration: state.duration,
-                cover_url: None,
+                cover_url: publication.cover_url.clone(),
             },
             playback,
         }
@@ -145,7 +147,7 @@ impl From<souvlaki::Error> for PlatformError {
 
 /// Main-thread/system-service-owned publication boundary.
 pub trait PlatformAdapter {
-    fn publish(&mut self, state: &PlayerState) -> Result<(), PlatformError>;
+    fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError>;
     fn clear(&mut self) -> Result<(), PlatformError>;
 }
 
@@ -200,7 +202,10 @@ where
     }
 }
 
-/// Execute one callback transaction and emit its durable semantic ordering.
+/// Execute one callback transaction and return the coherent refreshed state.
+///
+/// The worker owns the subsequent full publication because it must combine
+/// this state with the application-owned artwork generation and current URL.
 pub async fn handle_remote_command<T, F>(
     target: &mut T,
     command: RemoteCommand,
@@ -225,7 +230,6 @@ where
         .refresh()
         .await
         .map_err(|error| format!("refresh after {command} failed: {error}"))?;
-    emit(WorkerEvent::Publish(state.clone()))?;
     Ok(Some(state))
 }
 
@@ -292,10 +296,17 @@ mod tests {
             ..PlayerState::default()
         };
 
-        let projected = PlatformSnapshot::from(&state);
+        let projected = PlatformSnapshot::from(&ArtworkPublication {
+            state,
+            cover_url: Some("file:///tmp/cover.png".into()),
+        });
         assert_eq!(
             projected.metadata.artist.as_deref(),
             Some("First Artist; Second Artist")
+        );
+        assert_eq!(
+            projected.metadata.cover_url.as_deref(),
+            Some("file:///tmp/cover.png")
         );
         assert_eq!(
             projected.playback,
@@ -304,7 +315,10 @@ mod tests {
             }
         );
 
-        let empty = PlatformSnapshot::from(&PlayerState::default());
+        let empty = PlatformSnapshot::from(&ArtworkPublication {
+            state: PlayerState::default(),
+            cover_url: None,
+        });
         assert_eq!(empty.metadata.artist, None);
     }
 
@@ -329,7 +343,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn success_emits_receipt_result_refresh_and_full_publish_in_order() {
+    async fn success_emits_receipt_result_then_returns_refresh_for_full_publish() {
         let refreshed = PlayerState {
             occurrence: Some(OccurrenceId(9)),
             ..PlayerState::default()
@@ -341,20 +355,21 @@ mod tests {
         };
         let mut events = Vec::new();
 
-        handle_remote_command(&mut target, RemoteCommand::Play, &mut |event| {
+        let returned = handle_remote_command(&mut target, RemoteCommand::Play, &mut |event| {
             events.push(event);
             Ok(())
         })
         .await
+        .unwrap()
         .unwrap();
 
         assert_eq!(target.calls, ["execute", "refresh"]);
+        assert_eq!(returned, refreshed);
         assert_eq!(
             events,
             [
                 WorkerEvent::Command(CommandOutcome::Received(RemoteCommand::Play)),
                 WorkerEvent::Command(CommandOutcome::Succeeded(RemoteCommand::Play)),
-                WorkerEvent::Publish(refreshed),
             ]
         );
     }

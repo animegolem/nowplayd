@@ -2,11 +2,11 @@ use souvlaki::{MediaControls, MediaPlayback, PlatformConfig};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
+    artwork::ArtworkPublication,
     platform::{
         PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, RemoteCommand,
         command_from_media_event,
     },
-    state::PlayerState,
 };
 
 /// Linux MPRIS pass-through. The macOS-only shim is intentionally absent.
@@ -31,8 +31,8 @@ impl LinuxPlatform {
 }
 
 impl PlatformAdapter for LinuxPlatform {
-    fn publish(&mut self, state: &PlayerState) -> Result<(), PlatformError> {
-        let snapshot = PlatformSnapshot::from(state);
+    fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError> {
+        let snapshot = PlatformSnapshot::from(publication);
         self.controls
             .set_metadata(snapshot.metadata.as_souvlaki())?;
         self.controls.set_playback(snapshot.playback)?;

@@ -2,11 +2,11 @@ use souvlaki::{MediaControlEvent, MediaControls, MediaPlayback, PlatformConfig};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
+    artwork::ArtworkPublication,
     platform::{
         PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, RemoteCommand,
         command_from_media_event,
     },
-    state::PlayerState,
 };
 
 use self::shim::{NativeShim, SystemShim};
@@ -94,8 +94,8 @@ where
         Ok(())
     }
 
-    fn publish(&mut self, state: &PlayerState) -> Result<(), PlatformError> {
-        let snapshot = PlatformSnapshot::from(state);
+    fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError> {
+        let snapshot = PlatformSnapshot::from(publication);
         // set_metadata replaces the full dictionary; playback and progress must
         // always be restored after it (SPEC §5.2).
         self.controls.set_metadata(&snapshot.metadata)?;
@@ -124,8 +124,8 @@ impl MacPlatform {
 }
 
 impl PlatformAdapter for MacPlatform {
-    fn publish(&mut self, state: &PlayerState) -> Result<(), PlatformError> {
-        self.adapter.publish(state)
+    fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError> {
+        self.adapter.publish(publication)
     }
 
     fn clear(&mut self) -> Result<(), PlatformError> {
@@ -138,7 +138,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use crate::state::{PlaybackState, SongMetadata};
+    use crate::state::{PlaybackState, PlayerState, SongMetadata};
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     enum Call {
@@ -266,7 +266,12 @@ mod tests {
             ..PlayerState::default()
         };
 
-        adapter.publish(&player).unwrap();
+        adapter
+            .publish(&ArtworkPublication {
+                state: player,
+                cover_url: Some("file:///tmp/cover.png".into()),
+            })
+            .unwrap();
 
         assert_eq!(
             state.lock().unwrap().calls,

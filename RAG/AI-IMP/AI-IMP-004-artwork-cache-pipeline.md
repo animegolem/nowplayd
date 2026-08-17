@@ -4,7 +4,7 @@ tags:
   - IMP-LIST
   - Implementation
   - artwork
-kanban_status: planned
+kanban_status: in-progress
 depends_on: [AI-IMP-002, AI-IMP-003]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.8
@@ -18,9 +18,9 @@ date_completed:
 
 Implements SPEC.org §11 FR-4 via the §5.3 atomic cache pipeline. MPD
 serves artwork as bytes; souvlaki takes a file URL; the gap needs an
-explicit cache lifecycle with stale-art suppression, and souvlaki
-0.8.3's artwork path panics on bad input (issue #77) so only
-verified-written files may ever reach it. Done-state: artwork for the
+explicit cache lifecycle with stale-art suppression. The pinned
+souvlaki fork guards nil image decoding, while §5.3 independently
+requires nowplayd to validate every image before publication. Done-state: artwork for the
 §7 fixture appears within 3 s of song change; songs without art show
 none (not the previous song's); unit tests cover the cache lifecycle.
 
@@ -80,30 +80,30 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Chunked `albumart` + `readpicture` reads with size cap and
+- [x] Chunked `albumart` + `readpicture` reads with size cap and
       typed errors; fixture tests incl. ACK ("no art") case.
-- [ ] Cache write is temp + rename in the same directory; test proves
+- [x] Cache write is temp + rename in the same directory; test proves
       no partially-written file is ever at the published path.
-- [ ] Media-key keying (§5.1.1): unchanged media key → zero fetches, incl. the duplicate-URI occurrence-change case (test
+- [x] Media-key keying (§5.1.1): unchanged media key → zero fetches, incl. the duplicate-URI occurrence-change case (test
       asserts fetch-count).
-- [ ] No-art songs: explicit art-less republish; test asserts the
+- [x] No-art songs: explicit art-less republish; test asserts the
       adapter received a clear-art publish, not silence.
-- [ ] Metadata publish is never blocked behind art fetch (two-phase
+- [x] Metadata publish is never blocked behind art fetch (two-phase
       publish; test with delayed fake fetch).
-- [ ] Invalid-image fixture: corrupt/unsupported bytes are detected
+- [x] Invalid-image fixture: corrupt/unsupported bytes are detected
       at our boundary and never reach souvlaki as a published URL
       (test asserts no-art publish instead).
-- [ ] Fairness: delayed multi-chunk fake test asserts a remote
+- [x] Fairness: delayed multi-chunk fake test asserts a remote
       command issued mid-fetch is serviced before the next art chunk.
-- [ ] Cache-reuse revalidation: missing or undecodable cached file →
+- [x] Cache-reuse revalidation: missing or undecodable cached file →
       refetch, not a stale publish (test).
-- [ ] Artwork failures logged (FR-8) and never fatal.
-- [ ] Live-check matrix proposed in the submission (Review Lead
+- [x] Artwork failures logged (FR-8) and never fatal.
+- [x] Live-check matrix proposed in the submission (Review Lead
       appends to HUMAN-TESTING): fixture track art within 3 s;
       art-less track shows no stale art; elapsed position remains
       present after the second-phase artwork publish (moved here
       from AI-IMP-003 at rev 0.8).
-- [ ] Gates green; counts reported.
+- [x] Gates green; counts reported.
 
 ### Acceptance Criteria
 
@@ -125,3 +125,16 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- The first working pass performed cache lookup, decode validation, and
+  durable writes synchronously in the command-owner loop. Self-review caught
+  that this weakened the two-phase latency boundary. Those operations now run
+  as generation-tagged blocking jobs; the worker publishes art-less metadata
+  first and continues prioritizing remote commands and coherent refreshes.
+- The rev 0.11 MPD binary primitive and exact-offset liveness retry already
+  existed at the authorized baseline, so `src/mpd/command.rs` required no
+  product change. This ticket adds the strict multi-chunk assembler and the
+  nonzero-offset reconnect integration fixture at the artwork layer.
+- A missing user cache directory disables cache publication and logs a
+  nonfatal artwork failure. A regression test proves that store failure does
+  not create an infinite refetch loop.
