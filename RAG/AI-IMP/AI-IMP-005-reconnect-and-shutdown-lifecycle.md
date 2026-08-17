@@ -56,6 +56,11 @@ event loop from AI-IMP-003.
 ### Files to Touch
 
 - `src/lifecycle.rs`: new.
+- `src/mpd/mod.rs`: typed error classification (malformed-mapping
+  variants get a class; §5.5 rev 0.13); `src/platform/mod.rs`:
+  typed outcomes + acknowledged-clear event with one-shot ack;
+  `src/artwork.rs`: `invalidate_epoch()`; `src/lib.rs`; Cargo files
+  if signal/jitter deps are added.
 - `src/main.rs`: supervisor owns the run loop; signal wiring.
 - `src/mpd/idle.rs` / `command.rs`: expose clean teardown if gaps
   found.
@@ -92,10 +97,33 @@ Before marking an item complete on the checklist MUST **stop** and
       §5.3; otherwise refetch).
 - [ ] SIGTERM/SIGINT → `clear()` → clean exit code 0; works under the
       winit main-thread structure.
+- [ ] Typed classification preserved through every seam per §5.5
+      rev 0.13 (no stringification before the supervisor; ACK =
+      healthy-pair only; malformed-mapping tears down; mutating
+      transport failure emits outcome AND lifecycle fault).
+- [ ] Refresh incoherence bounded per §5.1 rev 0.13: exactly three
+      attempts → `SnapshotCoherenceExhausted` → teardown/clear/
+      backoff; fixture asserts count and routing.
+- [ ] Acknowledged production clear (one-shot ack) awaited before
+      first backoff sleep and before clean exit; SIGTERM/SIGINT
+      route through it, exit 0; clear failure terminal and honest.
+- [ ] `invalidate_epoch()` on disconnect/no-song/shutdown; stale job
+      completions discarded; reconnect re-runs cache
+      lookup/decode; idle task join handle owned and
+      aborted/awaited on every teardown (test: no stale idle role
+      after reconnect).
+- [ ] Deterministic timing per §5.5 rev 0.13: injected
+      clock/sleeper/RNG; 1,2,4,8,16,30 cap with jitter
+      [nominal/2, nominal]; reset only on coherent refresh ≥30 s
+      connected; bounds asserted without wall-clock sleeps.
+- [ ] Runtime inputs injected (ConnectionConfig, cache root,
+      event/log sink) with call-site defaults; interim stderr sink
+      retained for 006 to swap.
 - [ ] All transitions logged with reason (FR-8).
-- [ ] Live checks appended to `RAG/HUMAN-TESTING.md`: kill mpd (entry
-      disappears), restart mpd (entry returns unaided), `mpc clear`
-      (entry disappears), SIGTERM daemon (entry disappears).
+- [ ] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
+      Review Lead's): kill mpd (one true clear before backoff),
+      restart (returns unaided with revalidated art), `mpc clear`,
+      SIGTERM/SIGINT acknowledged clear + exit 0.
 - [ ] Gates green; counts reported.
 
 ### Acceptance Criteria

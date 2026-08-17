@@ -43,11 +43,11 @@ Git edit date so a second review can be judged.
 - RAG/scripts/carrier.py (1060 LOC)
 - src/artwork.rs (1005 LOC)
 - RAG/scripts/generate-index.sh (661 LOC)
+- SPEC.org (655 LOC)
 
 ### > 300 LOC
 
 - src/main.rs (554 LOC)
-- SPEC.org (533 LOC)
 - tests/proto.rs (448 LOC)
 - src/platform/mod.rs (405 LOC)
 - tests/artwork.rs (400 LOC)

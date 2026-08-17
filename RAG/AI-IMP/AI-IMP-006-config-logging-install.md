@@ -39,9 +39,21 @@ README documents all of it.
 
 ### Design/Approach
 
-`src/config.rs`: precedence env (`NOWPLAYD_*`) > TOML
-(`~/.config/nowplayd/config.toml`) > defaults; keys: mpd address
-(tcp/unix), password, cache dir, log level/target. Secrets never
+`src/config.rs`: precedence env > TOML
+(`~/.config/nowplayd/config.toml`) > defaults, with the EXACT §5.4
+rev 0.13 schema: `NOWPLAYD_MPD_ADDRESS`, `NOWPLAYD_MPD_PASSWORD`,
+`NOWPLAYD_CACHE_DIR`, `NOWPLAYD_LOG_LEVEL`; one address syntax
+distinguishing TCP from unix socket; missing file = defaults,
+malformed = loud failure; redacted Debug on config AND
+source-report types. Shipping identity per §5.4 rev 0.13:
+`io.github.animegolem.nowplayd` (bundle id, agent label, plist
+name), `~/Applications/nowplayd.app`, `~/Library/Caches/nowplayd/`,
+`~/Library/Logs/nowplayd.log`. Supervision split: launchd
+`KeepAlive = { SuccessfulExit = false; }` + `ThrottleInterval`,
+config preflighted before bootstrap. Logging: tracing on stderr in
+all modes, `StandardErrorPath` owns the file, immutable
+`mpd_protocol=off` applied after user verbosity. Supplies runtime
+inputs to the 005 supervisor and swaps ONLY its interim sink. Secrets never
 logged (FR-8: log the source of each setting and non-secret values at
 startup). A TOML-stored password is a documented plaintext threat
 boundary (§11 FR-7 rev 0.4): README states it plainly, `install.sh`
@@ -59,8 +71,12 @@ each step idempotent via compare-before-write), `uninstall.sh`
 
 - `src/config.rs`, `src/main.rs` (config + tracing init): new/edit.
 - `Cargo.toml`: `tracing`, `tracing-subscriber`, TOML parser.
-- `packaging/Info.plist`, `packaging/dev.nowplayd.plist.tmpl`,
-  `packaging/build-bundle.sh`, `install.sh`, `uninstall.sh`: new.
+- `packaging/Info.plist`,
+  `packaging/io.github.animegolem.nowplayd.plist.tmpl`,
+  `packaging/build-bundle.sh`, `packaging/nowplayd.icns` (interim
+  fixture-derived asset, provenance §5.4 rev 0.13), `install.sh`,
+  `uninstall.sh`: new.
+- Root `Cargo.lock`, `src/lib.rs`, config/logging tests: in scope.
 - `README.md`: install/update/uninstall/config documentation.
 - `RAG/HUMAN-TESTING.md`: install-path live checks.
 
@@ -100,9 +116,16 @@ Before marking an item complete on the checklist MUST **stop** and
 - [ ] README: quick start, config reference (incl. password threat
       boundary), update, uninstall, troubleshooting (log locations,
       unrotated-log note).
-- [ ] Live checks appended to `RAG/HUMAN-TESTING.md`: fresh install →
-      working media keys; logout/login persistence; uninstall leaves
-      no Now Playing entry and no agent.
+- [ ] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
+      Review Lead's): clean install with icon (no white-dot badge);
+      second install no-op without restart; changed update reloads
+      once; logout/login persistence; uninstall + second-uninstall
+      no-op; clean signal exit does not relaunch under
+      SuccessfulExit=false.
+- [ ] Installer safety per §5.4 rev 0.13: refuse unsafe/empty HOME,
+      validate exact targets before recursive removal, staged
+      replacement with bounded unload wait; shell-level temp-root
+      tests where possible.
 - [ ] Gates green; counts reported.
 
 ### Acceptance Criteria

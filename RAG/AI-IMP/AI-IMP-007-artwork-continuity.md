@@ -40,9 +40,22 @@ guards (stale-discard, true clear) still test green.
 
 ### Design/Approach
 
-Per §5.3 rev 0.12, mechanism to round-1:
+Per §5.3 rev 0.12 AS AMENDED rev 0.13 (round-1 found the held-URL
+mechanism non-executable — souvlaki set_metadata assigns art-less
+immediately):
 
-1. Playback-only diffs (same media key, playback/elapsed change):
+0. Fork feature commit in animegolem/souvlaki (§5.3 rev 0.13):
+   macOS metadata op preserves current native artwork while a
+   non-null URL loads, atomic swap on guarded completion,
+   synchronous removal on resolved no-art; generation guard kept.
+   Branch pushed under the owner's range authorization; new
+   immutable rev pinned here (Cargo.toml + Cargo.lock in scope).
+   Fork diff is part of wave review.
+
+1. Publication intent enum selected by the worker (§5.3 rev 0.13):
+   FullMetadata vs PlaybackOnly; occurrence-only with no projected
+   delta makes no platform call; clear is never a continuity
+   publish. Playback-only diffs (same media key, playback/elapsed change):
    macOS impl takes souvlaki's merge path (`set_playback` /
    `set_playback_progress` copy the prior dictionary) instead of
    `set_metadata` — artwork key survives natively. The adapter
@@ -59,8 +72,9 @@ Per §5.3 rev 0.12, mechanism to round-1:
 
 ### Files to Touch
 
-- `src/platform/mod.rs`: diff-aware publication shape (playback-only
-  vs metadata publish), hold/swap policy.
+- fork: `animegolem/souvlaki` feature branch (preserve/swap).
+- `Cargo.toml` + root `Cargo.lock`: new fork pin.
+- `src/platform/mod.rs`: publication intent shape, hold/swap policy.
 - `src/platform/macos/mod.rs`: merge-path call selection.
 - `src/platform/linux.rs`: keep compiling with the shared shape.
 - `src/main.rs`: worker publish sites if the event shape changes.
@@ -74,11 +88,19 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
+- [ ] Fork feature commit implemented, reviewed diff, new rev pinned;
+      `cargo check` from a clean fetch.
+- [ ] Publication intent enum with the §5.3 rev 0.13 mapping incl.
+      occurrence-only no-call rule.
 - [ ] Playback-only diff routes to the merge path; spy test asserts
-      no `set_metadata` call and artwork key untouched.
-- [ ] Media-key change publishes with held cover URL; swap on
-      resolve; tests for same-art (no visible change event),
-      different-art (swap), and no-art (linger then art-less).
+      no `set_metadata` call and artwork key untouched; Stopped and
+      absent-progress cases route through the art-preserving full
+      path (tests for Playing/Paused with progress, Stopped, absent).
+- [ ] Media-key change: continuity contract is OBSERVABLE — spy/fork
+      tests assert the prior native artwork key remains present
+      until replacement ("no intermediate art-less native state");
+      different-art swaps on arrival; resolved no-art removes
+      synchronously.
 - [ ] Stale-discard (delayed A→B) and true-clear tests still green,
       re-asserted against the new paths.
 - [ ] Elapsed/state correctness preserved through merge-path

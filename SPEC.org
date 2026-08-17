@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.12     | 2026-08-17   |
+| Draft  | 0.13     | 2026-08-17   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -160,6 +160,14 @@ atomicity mechanism may substitute; "map the two latest responses"
 may not. A test injecting a transition between the two logical reads
 must prove no mixed =PlayerState= is emitted.
 
+Incoherence bound (ruled rev 0.13, closing the IMP-002 verdict
+note): THREE grouped refresh attempts, then a distinct typed
+=SnapshotCoherenceExhausted= fault treated as an unusable connection
+epoch — paired teardown, acknowledged clear, backoff (§5.5). Fixture
+proves exactly three attempts and supervisor routing. A rev 0.10
+liveness reconnect that succeeds internally stays transparent; only
+a failure surviving its one retry enters paired teardown.
+
 *** 5.1.1 Song identity (ruled rev 0.6)
 
 One ambiguous "identity" field is forbidden; =PlayerState= carries
@@ -274,6 +282,39 @@ must not visibly drop art it is about to re-show.
 - True =clear()= (disconnect/no-song/shutdown) is unchanged —
   continuity never delays §5.2 clearing.
 
+Continuity mechanism (ruled rev 0.13 — the rev 0.12 held-URL idea is
+NOT executable: pinned souvlaki =set_metadata= assigns an art-less
+dictionary immediately and loads the URL async, so a held URL
+re-creates the M4 flicker; verified against the fork source):
+- The nowplayd-owned souvlaki fork gains one minimal feature commit:
+  the macOS metadata operation PRESERVES the current native artwork
+  key while a non-null cover URL loads, atomically replaces it only
+  after the guarded load completes, and removes it synchronously
+  when the resolved publication has no cover. The existing global
+  generation guard is kept. 007 pins that new immutable revision.
+  MediaPlayer ownership stays in souvlaki; the §4 project shim stays
+  two-method (§4 unamended). Fork branch pushed to
+  =animegolem/souvlaki= under the owner's range authorization; the
+  fork diff is part of wave review.
+- Continuity contract is OBSERVABLE, not no-op: acceptance is "no
+  intermediate art-less native state." Same-album tracks have
+  different media keys and URLs, so a swap of an identical image is
+  visually continuous — no content-identity subsystem. Spy/fork
+  tests assert the prior artwork key remains present until
+  replacement.
+- Publication intent (rev 0.13): the worker selects an explicit
+  intent — =FullMetadata= (initial publish, media/metadata/duration
+  change, artwork resolve, resolved no-art) vs =PlaybackOnly=
+  (same-media playback/elapsed-only). Occurrence-only changes with
+  no projected-field delta make NO platform call (ruled; never
+  accidentally full-metadata). True clear stays a separate
+  operation, never a continuity publish.
+- Merge-path edge (verified): souvlaki updates elapsed only for
+  Playing/Paused with =Some(progress)=; Stopped or absent progress
+  leaves a stale elapsed key. Those cases route through the
+  art-preserving full path. Tests cover Playing/Paused with
+  progress, Stopped, and absent progress.
+
 Fairness mechanics (rev 0.11, sharpening rev 0.4): one artwork chunk
 per worker scheduling turn; pending remote commands and state
 refreshes are drained before the next chunk. The ordering
@@ -333,10 +374,49 @@ properly; launchd user agent for start-at-login/keep-alive. Install
 and update are idempotent; uninstall is documented (rev 0.3, §11
 FR-9).
 
-Logging (ruled rev 0.4): launchd's =StandardOutPath=/=StandardErrorPath=
-redirect only — launchd provides NO rotation. v1 ships documented
-unrotated file logging with a conservative default level; rotation or
-unified logging is future work (§9).
+Logging (ruled rev 0.4; owner ruled rev 0.13): launchd's
+=StandardOutPath=/=StandardErrorPath= redirect only — launchd
+provides NO rotation. v1: tracing writes to STDERR in all modes and
+=StandardErrorPath= owns the production file — no second app-managed
+file writer. The immutable =mpd_protocol=off= directive is applied
+AFTER user verbosity and cannot be overridden by any route (§11
+FR-7). Rotation/unified logging remain future work (§9).
+
+Config schema (ruled rev 0.13): TOML keys and env names are exact —
+=NOWPLAYD_MPD_ADDRESS=, =NOWPLAYD_MPD_PASSWORD=,
+=NOWPLAYD_CACHE_DIR=, =NOWPLAYD_LOG_LEVEL= — with ONE address
+syntax unambiguously distinguishing TCP from unix socket. Missing
+file = defaults; malformed present file = loud startup failure.
+Config and source-report types have redacted =Debug=.
+
+Supervision split (ruled rev 0.13): launchd handles PROCESS failure
+only; the §5.5 supervisor owns MPD outages in-process forever.
+Plist: =KeepAlive = { SuccessfulExit = false; }= plus an explicit
+=ThrottleInterval= — clean signal exit 0 does not relaunch, a crash
+does; KeepAlive implies RunAtLoad. Install/update PREFLIGHTS the
+config before bootstrap so a malformed installed config cannot enter
+a throttled restart loop.
+
+Shipping identity (ruled rev 0.13; owner may veto at
+authorization): bundle id =io.github.animegolem.nowplayd= (a
+namespace the owner actually controls); launchd label and plist name
+match it; app =~/Applications/nowplayd.app=; cache
+=~/Library/Caches/nowplayd/=; log =~/Library/Logs/nowplayd.log=.
+The =org.nowplayd.*= dev identities were temporary.
+
+Icon (rev 0.13): =packaging/nowplayd.icns= ships in-repo — interim
+asset is the fixture-derived icns (generated in-project from
+=spike/fixture.jpg=; SHA-256 =d9b49fda…53e0d111=), import authorized
+with provenance recorded; the owner may replace the asset at any
+time. An iconless bundle renders a white placeholder badge on the
+Now Playing card (owner-observed).
+
+Installer idempotence (rev 0.13): unchanged second install neither
+boots out nor rewrites; changed update = bootout → bounded unload
+wait → staged replacement → bootstrap; scripts refuse unsafe/empty
+=HOME= and validate exact targets before any recursive removal;
+double uninstall is a clean no-op; shell-level temp-root tests where
+possible.
 
 ** 5.5 Lifecycle failure matrix (added rev 0.4)
 
@@ -355,6 +435,47 @@ after both plus the initial full refresh succeed. Then:
 - Cache reuse on reconnect revalidates per §5.3.
 
 All four cases are covered by fake-connection lifecycle tests.
+
+Typed classification (rev 0.13): =Command= ACK is the SOLE
+healthy-pair failure class. Exhausted I/O/EOF AND malformed
+protocol/mapping errors (=UnexpectedFrameCount=/=UnexpectedFields=/
+=MissingField=/=InvalidField= — today neither transport nor ACK)
+tear down the pair. A mutating transport failure BOTH emits the
+typed failed command outcome (never retried) AND surfaces a
+lifecycle fault. Typed errors are preserved through every worker
+seam (idle/artwork/refresh channels) until the supervisor
+classifies them — no stringification before classification.
+
+Acknowledged clear (rev 0.13): platform mutation is
+main-thread-owned, so the supervisor issues a production clear
+REQUEST with a one-shot acknowledgement and waits for it before the
+first backoff sleep and before clean exit; platform clear failure is
+terminal and reported honestly. SIGTERM/SIGINT route through this
+path and exit 0; other winit exits clear exactly once.
+
+Artwork epoch invalidation (rev 0.13): disconnect, no-song, and
+shutdown call =invalidate_epoch()= — advance the application art
+generation, cancel pending logical work, clear held URL/key, and
+make all outstanding job completions stale (tagged results
+discarded deterministically; blocking jobs need not be
+force-cancelled). Reconnect observes from an empty epoch and re-runs
+cache lookup/decode. The idle task's join handle is owned and
+aborted/awaited on every pair teardown so no stale idle role
+survives a reconnect. 007's hold policy applies ONLY to connected
+media→media transitions — never to disconnect/no-song/shutdown.
+
+Deterministic timing (rev 0.13): injectable monotonic clock,
+sleeper, and RNG. Nominal backoff 1,2,4,8,16,30,30… s with equal
+jitter in [nominal/2, nominal]; 30 s is a hard cap. Reset only on a
+successful coherent refresh at/after 30 s continuously connected —
+never on handshake or quiet alone. Tests assert bounds without
+wall-clock sleeps.
+
+005→006 interface (rev 0.13): the supervisor accepts runtime inputs
+(=ConnectionConfig=, cache root, event/log sink) by injection with
+defaults at the call site — 005 keeps the interim typed-outcome
+stderr sink; 006 supplies parsed config and replaces ONLY the sink
+with tracing, never rewriting the supervisor API.
 
 * 6. Current slice
 
@@ -479,6 +600,7 @@ Self-contained scope for deferred features:
 | 0.10 | 2026-08-16 | M3 live gate falsified the submission (correctly): the quiet command role dies at MPD's default 60 s connection_timeout (idle exempt) and the next natural transition hits a dead socket — a decomposition gap where no ticket owned command-role liveness. Ruled: event-driven per-use liveness contract (§5.1 rev 0.10) — staleness check + ping-validate + reconnect at use, retry-once for non-mutating ops only, mutating commands never blindly retried (double-execution hazard), idle future never cancelled; supervisor/backoff/clear remains IMP-005, built atop this primitive. IMP-003 amended to own it; live matrices must include a >60 s quiet soak before a natural transition. Submission returned for repair; resubmission reruns the full live matrix incl. soak. |
 | 0.11 | 2026-08-17 | Sol round-1 on AI-IMP-004 accepted in full (verified in source: PlatformSnapshot hardcodes cover_url None so any same-media publish would erase art; worker branches are uninterrupted transactions; liveness retries the exact binary offset once). Ruled into §5.3: application-owned media generation with latest-state artwork publish; art retention on every full publish; one-chunk-per-turn fairness with asserted ordering; concrete cache/decoder contract (10 MiB cap, JPEG+PNG via image crate at 8192×8192 bound, SHA-256 media-key filenames, Url::from_file_path, temp→sync→rename, current+previous retention); strict binary assembly + narrow fallback classification (empty readpicture = no art; transport failures are not). Ticket Files to Touch expanded to the real seam (main.rs, lib.rs, Cargo.toml/lock, linux leg); historical 0.8.3 panic wording corrected to describe the pinned fork. |
 | 0.12 | 2026-08-17 | AI-IMP-004 live matrix PASSED and ticket closed. Owner product ruling from the gate: artwork continuity (§5.3) — playback-only publishes take souvlaki's merge path so pause/play never drops art; media-key transitions hold current art until the new fetch resolves (cache-hit = no visible change; no-art = linger-then-clear, accepted); true clear unchanged; stale-publish guard unchanged. Supersedes the rev 0.11 art-less-first transition default. Cut as AI-IMP-007. M4 dev bundle stays running at owner's pleasure until IMP-006 ships the installer. |
+| 0.13 | 2026-08-17 | Wave 4 combined round-1 accepted in full (8 amendments; key verification: held-URL continuity is NOT executable — souvlaki set_metadata assigns art-less immediately — so the owned fork gains a minimal preserve/swap feature commit, §4 shim stays narrow). Ruled: observable continuity contract + publication intent enum + progress-absent edge (§5.3); 3-attempt incoherence cap → SnapshotCoherenceExhausted (§5.1); typed failure classification through all seams, acknowledged clear, artwork epoch invalidation, owned idle handle, deterministic jittered backoff, injected 005→006 interface (§5.5); config schema, stderr-only logging, SuccessfulExit=false + ThrottleInterval + config preflight, shipping identity io.github.animegolem.nowplayd, icon import with provenance, installer idempotence (§5.4). Honest commit boundaries confirmed; combined live matrix accepted as the owner-run basis. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
