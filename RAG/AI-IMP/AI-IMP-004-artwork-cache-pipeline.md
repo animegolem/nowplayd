@@ -55,11 +55,21 @@ delay metadata publishing (two-phase publish) NOR remote commands.
 
 ### Files to Touch
 
-- `src/artwork.rs`: new.
+- `src/artwork.rs`: new — fetch/cache state machine per §5.3
+  rev 0.11 (app generation, assembly, decode validation, digest
+  naming, durable write).
 - `src/mpd/command.rs`: `albumart`/`readpicture` chunked reads over
-  the binary primitive.
+  the binary primitive (strict assembly per §5.3 rev 0.11).
+- `src/main.rs`: worker scheduler — one chunk per turn, drain
+  commands/refreshes between chunks; `WorkerEvent`/publish shape
+  carries the current cover URL.
+- `src/lib.rs`: export the new module.
 - `src/platform/mod.rs` + macOS impl: artwork slot in publish path,
-  explicit no-art republish.
+  art retention on full publishes, explicit no-art republish.
+- `src/platform/linux.rs`: only if the shared publication signature
+  changes (keep the Linux leg compiling).
+- `Cargo.toml` + root `Cargo.lock`: `image` (jpeg+png), `sha2`,
+  `url` dependencies.
 - `tests/artwork.rs`: cache lifecycle unit tests (temp dir).
 
 ### Implementation Checklist

@@ -14,11 +14,12 @@ truth derives from; do not create competing markdown spec documents.
 
 This repo runs the review-gated two-lead pattern (see `RAG/roles/`):
 
-- **Review Lead** (long-context seat, owner's checkout, `AGENTS.md`): rulings,
-  tickets, briefs, verdicts, merges, ALL destructive git.
-- **Code Lead** (Claude, isolated clone `.workspaces/code-lead/primary`, its
-  own `CLAUDE.md` there): implementation sittings on `imp/*` branches, one
-  atomic commit per ticket, submissions via the channel.
+- **Review Lead** (Fable/Claude, long-context seat, owner's checkout,
+  `CLAUDE.md`): rulings, tickets, briefs, verdicts, merges, ALL destructive git.
+- **Code Lead** (Sol/Codex, `AGENTS.md`): round-1 source review from the
+  canonical project task, then authorized implementation in an isolated clone
+  under `.workspaces/code-lead/<id>` on an `imp/*` branch, one atomic commit
+  per ticket, submissions via the channel.
 - Channel: `channel/` (local, gitignored) per `channel/PROTOCOL.md` — also the
   canonical home of the destructive-op fence.
 
