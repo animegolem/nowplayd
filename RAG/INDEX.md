@@ -7,11 +7,11 @@
 | Status | EPICs | IMPs |
 |--------|-------|------|
 | In Progress | 1 | 0 |
-| Planned | 0 | 2 |
+| Planned | 0 | 3 |
 | Deferred | 0 | 0 |
 | Cancelled | 0 | 0 |
 | Completed | 0 | 4 |
-| **Total** | **1** | **6** |
+| **Total** | **1** | **7** |
 
 ## In Progress
 
@@ -25,6 +25,7 @@
 - [[AI-IMP-004-artwork-cache-pipeline|IMP-004]] Artwork cache pipeline — completed
 - [[AI-IMP-005-reconnect-and-shutdown-lifecycle|IMP-005]] Reconnect and shutdown lifecycle — planned
 - [[AI-IMP-006-config-logging-install|IMP-006]] Config logging install — planned
+- [[AI-IMP-007-artwork-continuity|IMP-007]] Artwork continuity — planned
 
 ---
 
@@ -46,7 +47,7 @@ Git edit date so a second review can be judged.
 ### > 300 LOC
 
 - src/main.rs (554 LOC)
-- SPEC.org (511 LOC)
+- SPEC.org (533 LOC)
 - tests/proto.rs (448 LOC)
 - src/platform/mod.rs (405 LOC)
 - tests/artwork.rs (400 LOC)

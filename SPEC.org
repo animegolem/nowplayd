@@ -7,7 +7,7 @@ acceptance. It is the ONE document all truth derives from.
 
 | STATUS | REVISION | LAST UPDATED |
 |--------+----------+--------------|
-| Draft  | 0.11     | 2026-08-17   |
+| Draft  | 0.12     | 2026-08-17   |
 
 #+begin_quote
 *WORKING PRODUCT STATEMENT*
@@ -253,6 +253,27 @@ URL erases art. Same-key republishes preserve the URL with zero new
 fetches (test-asserted); a NEW media key publishes explicitly
 art-less metadata first, then the guarded artwork phase.
 
+Artwork continuity (owner-ruled rev 0.12, from the M4 live gate —
+supersedes the art-less-first transition default above): the card
+must not visibly drop art it is about to re-show.
+- Playback-only changes (pause/play/elapsed, same media key) must
+  not pass through =set_metadata= — souvlaki's merge-path calls
+  (=set_playback=/=set_playback_progress= copy the prior dictionary)
+  preserve the artwork key natively. This refines, not reverses, the
+  rev 0.8 full-snapshot contract: the ADAPTER still receives full
+  snapshots; the macOS impl selects the merge path for
+  playback-only diffs. Exact mechanism to round-1.
+- Media-key changes HOLD the current artwork through the transition
+  and swap only when the new fetch resolves: cache-hit same art →
+  no visible change; different art → swap on arrival; resolved
+  no-art → clear then. Prior art lingering for the fetch duration on
+  an art-less track is accepted by owner ruling (the Music.app
+  behavior). The rev 0.11 delayed-A→B discard guard still applies —
+  holding is never publishing STALE art as new, it is not-yet-
+  removing current art.
+- True =clear()= (disconnect/no-song/shutdown) is unchanged —
+  continuity never delays §5.2 clearing.
+
 Fairness mechanics (rev 0.11, sharpening rev 0.4): one artwork chunk
 per worker scheduling turn; pending remote commands and state
 refreshes are drained before the next chunk. The ordering
@@ -457,6 +478,7 @@ Self-contained scope for deferred features:
 | 0.9 | 2026-08-16 | Sol STOP ruled (failure reproduced from a clean fetch: pinned upstream 436a5aed fails E0425 on macOS — the nil-guard merge left stale Cocoa nil refs over the raw-pointer backend; a rev 0.4 verification gap: guard existence was checked, compilation was not). Owner authorized option 1: nowplayd-owned fork animegolem/souvlaki, single 3-line fix commit ba2bf765 (is_null/null_mut), verified compiling clean; pin replaced (§5.3, preserved reversal); same fix offered upstream as Sinono3/souvlaki#79 with possible future return to upstream. IMP-003/004 dependency lines updated. Process lesson recorded: dependency pins are verified by BUILD, not by source inspection alone. |
 | 0.10 | 2026-08-16 | M3 live gate falsified the submission (correctly): the quiet command role dies at MPD's default 60 s connection_timeout (idle exempt) and the next natural transition hits a dead socket — a decomposition gap where no ticket owned command-role liveness. Ruled: event-driven per-use liveness contract (§5.1 rev 0.10) — staleness check + ping-validate + reconnect at use, retry-once for non-mutating ops only, mutating commands never blindly retried (double-execution hazard), idle future never cancelled; supervisor/backoff/clear remains IMP-005, built atop this primitive. IMP-003 amended to own it; live matrices must include a >60 s quiet soak before a natural transition. Submission returned for repair; resubmission reruns the full live matrix incl. soak. |
 | 0.11 | 2026-08-17 | Sol round-1 on AI-IMP-004 accepted in full (verified in source: PlatformSnapshot hardcodes cover_url None so any same-media publish would erase art; worker branches are uninterrupted transactions; liveness retries the exact binary offset once). Ruled into §5.3: application-owned media generation with latest-state artwork publish; art retention on every full publish; one-chunk-per-turn fairness with asserted ordering; concrete cache/decoder contract (10 MiB cap, JPEG+PNG via image crate at 8192×8192 bound, SHA-256 media-key filenames, Url::from_file_path, temp→sync→rename, current+previous retention); strict binary assembly + narrow fallback classification (empty readpicture = no art; transport failures are not). Ticket Files to Touch expanded to the real seam (main.rs, lib.rs, Cargo.toml/lock, linux leg); historical 0.8.3 panic wording corrected to describe the pinned fork. |
+| 0.12 | 2026-08-17 | AI-IMP-004 live matrix PASSED and ticket closed. Owner product ruling from the gate: artwork continuity (§5.3) — playback-only publishes take souvlaki's merge path so pause/play never drops art; media-key transitions hold current art until the new fetch resolves (cache-hit = no visible change; no-art = linger-then-clear, accepted); true clear unchanged; stale-publish guard unchanged. Supersedes the rev 0.11 art-less-first transition default. Cut as AI-IMP-007. M4 dev bundle stays running at owner's pleasure until IMP-006 ships the installer. |
 
 * 11. Functional requirements (normative; added rev 0.3)
 
