@@ -88,45 +88,45 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Config precedence env > TOML > default with unit tests per
+- [x] Config precedence env > TOML > default with unit tests per
       layer and a malformed-TOML loud-failure test.
-- [ ] Startup log: each setting's value (secrets redacted) and its
+- [x] Startup log: each setting's value (secrets redacted) and its
       source (FR-8); asserted in a capture test.
-- [ ] `tracing` wired through mpd/platform/lifecycle modules; file
+- [x] `tracing` wired through mpd/platform/lifecycle modules; file
       target under launchd, stderr otherwise.
-- [ ] Credential fence (§11 FR-7 rev 0.7): the subscriber PERMANENTLY
+- [x] Credential fence (§11 FR-7 rev 0.7): the subscriber PERMANENTLY
       disables the `mpd_protocol` tracing target — no env verbosity
       may re-enable it; capture test proves a sentinel password never
       appears at the most verbose permitted configuration; app logs
       record auth success/failure only.
-- [ ] `build-bundle.sh` produces a valid LSUIElement `.app` from
+- [x] `build-bundle.sh` produces a valid LSUIElement `.app` from
       `cargo build --release`, INCLUDING an app icon
       (`CFBundleIconFile` + `Resources/*.icns`) — macOS badges the
       Now Playing card with the source app's icon, and an iconless
       bundle renders a white placeholder dot (owner-observed on the
       M4 dev bundle, 2026-08-17). Icon asset choice is the owner's;
       the dev-bundle icns (fixture-art derived) is the interim.
-- [ ] `install.sh` idempotent: second run changes nothing and says
+- [x] `install.sh` idempotent: second run changes nothing and says
       so; update path (newer binary) replaces bundle and reloads
       agent.
-- [ ] `uninstall.sh` removes bundle, agent, artwork cache; leaves
+- [x] `uninstall.sh` removes bundle, agent, artwork cache; leaves
       config with printed notice; second run is a clean no-op.
-- [ ] Config file permissions: `install.sh` enforces 0600 when a
+- [x] Config file permissions: `install.sh` enforces 0600 when a
       password is present; README documents the plaintext boundary.
-- [ ] README: quick start, config reference (incl. password threat
+- [x] README: quick start, config reference (incl. password threat
       boundary), update, uninstall, troubleshooting (log locations,
       unrotated-log note).
-- [ ] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
+- [x] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
       Review Lead's): clean install with icon (no white-dot badge);
       second install no-op without restart; changed update reloads
       once; logout/login persistence; uninstall + second-uninstall
       no-op; clean signal exit does not relaunch under
       SuccessfulExit=false.
-- [ ] Installer safety per §5.4 rev 0.13: refuse unsafe/empty HOME,
+- [x] Installer safety per §5.4 rev 0.13: refuse unsafe/empty HOME,
       validate exact targets before recursive removal, staged
       replacement with bounded unload wait; shell-level temp-root
       tests where possible.
-- [ ] Gates green; counts reported.
+- [x] Gates green; counts reported.
 
 ### Acceptance Criteria
 
@@ -150,3 +150,22 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- Implemented the exact rev-0.13 identity throughout. The older
+  `dev.nowplayd.plist` example in Design/Approach is superseded by the same
+  section's explicit `io.github.animegolem.nowplayd` ruling and by SPEC.org
+  rev 0.13.
+- Imported the owner-authorized M4 development icon without modifying or
+  stopping the running M4 bundle. SHA-256:
+  `d9b49fdadef6055882f8d8f1dace9d79dac463d5ff2f4d9b8ed876af53e0d111`.
+- Automated gate: 71 tests passed (37 library, 8 binary, 9 artwork, 1
+  packaging safety, 15 protocol, 1 isolated-MPD smoke), with `cargo build`
+  and `cargo clippy -- -D warnings` green. Linux cross-check passed for
+  `x86_64-unknown-linux-gnu`.
+- Packaging checks passed: shell syntax, both plist lints, ad-hoc code-sign
+  verification, config preflight, unsafe-HOME target fence, second-install
+  no-op, changed-update single reload, password-file mode 0600, uninstall,
+  and second-uninstall no-op.
+- The macOS shipping/live matrix is proposed in the submission rather than
+  recorded here; `RAG/HUMAN-TESTING.md` remains untouched for the Review Lead
+  and owner.

@@ -5,11 +5,13 @@ use nowplayd::{
         ArtworkCache, ArtworkCoordinator, ArtworkError, ArtworkJobResult, ArtworkUpdate,
         default_cache_dir,
     },
+    config::AppConfig,
     lifecycle::{
         BackoffPolicy, FailureDisposition, JitterRng, LifecycleClock, LifecycleEvent, LifecycleLog,
         LifecycleSleeper, StderrLifecycleLog, SupervisorState, SystemJitter, SystemLifecycleClock,
         TokioSleeper, classify_failure,
     },
+    logging::{self, TracingLifecycleLog},
     mpd::{ConnectionConfig, IdleConnection, LiveCommandConnection, MpdError, Subsystem},
     platform::{
         CommandOutcome, RemoteCommand, RemoteCommandError, WorkerEvent, handle_remote_command,
@@ -45,6 +47,31 @@ impl Default for RuntimeInputs {
             log: Arc::new(StderrLifecycleLog),
         }
     }
+}
+
+impl From<AppConfig> for RuntimeInputs {
+    fn from(config: AppConfig) -> Self {
+        Self {
+            connection: config.connection,
+            cache_root: Some(config.cache_dir),
+            log: Arc::new(TracingLifecycleLog),
+        }
+    }
+}
+
+fn configured_runtime() -> Result<(RuntimeInputs, bool), Box<dyn std::error::Error>> {
+    let check_only = match std::env::args().skip(1).collect::<Vec<_>>().as_slice() {
+        [] => false,
+        [argument] if argument == "--check-config" => true,
+        _ => return Err("usage: nowplayd [--check-config]".into()),
+    };
+    let config = AppConfig::load()?;
+    logging::init(&config.log_level)?;
+    logging::log_startup_config(&config);
+    if check_only {
+        tracing::info!("configuration preflight passed");
+    }
+    Ok((config.into(), check_only))
 }
 
 enum WorkerInput {
@@ -106,7 +133,7 @@ where
     F: FnMut(WorkerEvent) -> Result<(), String>,
 {
     if let Some(warning) = update.warning {
-        eprintln!("artwork failure: {warning}");
+        tracing::warn!(reason = %warning, "artwork failure");
     }
     if let Some(publication) = update.publication {
         emit(WorkerEvent::Publish(publication))?;
@@ -268,7 +295,7 @@ where
                     Ok(None) => {}
                     Err(RemoteCommandError::Mpd(error)) => match classify_failure(&error) {
                         FailureDisposition::KeepPair => {
-                            eprintln!("remote refresh command rejected: {error}");
+                            tracing::warn!(reason = %error, "remote refresh command rejected");
                         }
                         FailureDisposition::TearDownPair => return SessionEnd::Fault(error),
                     },
@@ -290,14 +317,14 @@ where
                 }
                 Err(error) => match classify_failure(&error) {
                     FailureDisposition::KeepPair => {
-                        eprintln!("state refresh command rejected: {error}");
+                        tracing::warn!(reason = %error, "state refresh command rejected");
                     }
                     FailureDisposition::TearDownPair => return SessionEnd::Fault(error),
                 },
             },
             WorkerInput::Idle(Some(Err(error))) => match classify_failure(&error) {
                 FailureDisposition::KeepPair => {
-                    eprintln!("idle command rejected: {error}");
+                    tracing::warn!(reason = %error, "idle command rejected");
                 }
                 FailureDisposition::TearDownPair => return SessionEnd::Fault(error),
             },
@@ -474,14 +501,14 @@ async fn wait_for_shutdown_signal(shutdown: watch::Sender<bool>) {
     let mut interrupt = match signal(SignalKind::interrupt()) {
         Ok(signal) => signal,
         Err(error) => {
-            eprintln!("install SIGINT handler failed: {error}");
+            tracing::error!(reason = %error, "install SIGINT handler failed");
             return;
         }
     };
     let mut terminate = match signal(SignalKind::terminate()) {
         Ok(signal) => signal,
         Err(error) => {
-            eprintln!("install SIGTERM handler failed: {error}");
+            tracing::error!(reason = %error, "install SIGTERM handler failed");
             return;
         }
     };
@@ -494,13 +521,19 @@ async fn wait_for_shutdown_signal(shutdown: watch::Sender<bool>) {
 
 fn log_command_outcome(outcome: &CommandOutcome) {
     match outcome {
-        CommandOutcome::Received(command) => eprintln!("remote command received: {command}"),
-        CommandOutcome::Succeeded(command) => eprintln!("remote command succeeded: {command}"),
+        CommandOutcome::Received(command) => {
+            tracing::info!(command = %command, "remote command received");
+        }
+        CommandOutcome::Succeeded(command) => {
+            tracing::info!(command = %command, "remote command succeeded");
+        }
         CommandOutcome::Failed {
             command,
             class,
             error,
-        } => eprintln!("remote command failed: {command} ({class:?}): {error}"),
+        } => {
+            tracing::warn!(command = %command, class = ?class, reason = %error, "remote command failed")
+        }
     }
 }
 
@@ -522,14 +555,20 @@ mod macos_main {
 
     use super::*;
 
-    pub fn run() -> Result<(), Box<dyn Error>> {
+    pub fn run(inputs: RuntimeInputs) -> Result<(), Box<dyn Error>> {
         let event_loop = EventLoop::<WorkerEvent>::with_user_event().build()?;
         event_loop.set_control_flow(ControlFlow::Wait);
         let proxy = event_loop.create_proxy();
         let (command_tx, command_rx) = unbounded_channel();
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-        spawn_worker(proxy.clone(), command_rx, shutdown_tx.clone(), shutdown_rx);
+        spawn_worker(
+            proxy.clone(),
+            command_rx,
+            shutdown_tx.clone(),
+            shutdown_rx,
+            inputs,
+        );
         install_clear_test_hook(proxy.clone())?;
 
         let mut app = App::new(command_tx, shutdown_tx);
@@ -542,6 +581,7 @@ mod macos_main {
         command_rx: UnboundedReceiver<RemoteCommand>,
         shutdown_tx: watch::Sender<bool>,
         shutdown_rx: watch::Receiver<bool>,
+        inputs: RuntimeInputs,
     ) {
         thread::spawn(move || {
             let runtime = match Builder::new_multi_thread().enable_all().build() {
@@ -557,16 +597,11 @@ mod macos_main {
             let event_proxy = proxy.clone();
             let result = runtime.block_on(async move {
                 let signal_task = tokio::spawn(wait_for_shutdown_signal(shutdown_tx));
-                let result = run_worker(
-                    RuntimeInputs::default(),
-                    command_rx,
-                    shutdown_rx,
-                    move |event| {
-                        event_proxy
-                            .send_event(event)
-                            .map_err(|_| "platform event loop closed".to_string())
-                    },
-                )
+                let result = run_worker(inputs, command_rx, shutdown_rx, move |event| {
+                    event_proxy
+                        .send_event(event)
+                        .map_err(|_| "platform event loop closed".to_string())
+                })
                 .await;
                 signal_task.abort();
                 result
@@ -633,7 +668,7 @@ mod macos_main {
                 return;
             };
             if let Err(error) = adapter.publish(&publication) {
-                eprintln!("platform publish failed: {error}");
+                tracing::error!(reason = %error, "platform publish failed");
                 event_loop.exit();
             } else {
                 self.now_playing_cleared = false;
@@ -670,11 +705,11 @@ mod macos_main {
                 return;
             }
             match self.clear_now() {
-                Ok(()) => eprintln!(
+                Ok(()) => tracing::info!(
                     "M3 test hook: Now Playing cleared; controls remain attached; test publications latched"
                 ),
                 Err(error) => {
-                    eprintln!("platform clear failed: {error}");
+                    tracing::error!(reason = %error, "platform clear failed");
                     event_loop.exit();
                 }
             }
@@ -689,7 +724,7 @@ mod macos_main {
             match SystemPlatform::new(self.command_tx.clone()) {
                 Ok(adapter) => self.adapter = Some(adapter),
                 Err(error) => {
-                    eprintln!("platform attach failed: {error}");
+                    tracing::error!(reason = %error, "platform attach failed");
                     event_loop.exit();
                     return;
                 }
@@ -713,11 +748,11 @@ mod macos_main {
                 WorkerEvent::ShutdownComplete => event_loop.exit(),
                 WorkerEvent::ClearForTest => self.clear_test_or_exit(event_loop),
                 WorkerEvent::Fatal(error) => {
-                    eprintln!("worker failed: {error}");
+                    tracing::error!(reason = %error, "worker failed");
                     if !self.now_playing_cleared
                         && let Err(clear_error) = self.clear_now()
                     {
-                        eprintln!("platform clear during fatal exit failed: {clear_error}");
+                        tracing::error!(reason = %clear_error, "platform clear during fatal exit failed");
                     }
                     event_loop.exit();
                 }
@@ -729,7 +764,7 @@ mod macos_main {
             if !self.now_playing_cleared
                 && let Err(error) = self.clear_now()
             {
-                eprintln!("platform clear during event-loop exit failed: {error}");
+                tracing::error!(reason = %error, "platform clear during event-loop exit failed");
             }
         }
 
@@ -745,7 +780,11 @@ mod macos_main {
 
 #[cfg(target_os = "macos")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    macos_main::run()
+    let (inputs, check_only) = configured_runtime()?;
+    if check_only {
+        return Ok(());
+    }
+    macos_main::run(inputs)
 }
 
 #[cfg(target_os = "linux")]
@@ -753,32 +792,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use nowplayd::platform::{PlatformAdapter, SystemPlatform};
 
+    let (inputs, check_only) = configured_runtime()?;
+    if check_only {
+        return Ok(());
+    }
     let (command_tx, command_rx) = unbounded_channel();
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let signal_task = tokio::spawn(wait_for_shutdown_signal(shutdown_tx));
     let mut platform = SystemPlatform::new(command_tx)?;
-    let result = run_worker(
-        RuntimeInputs::default(),
-        command_rx,
-        shutdown_rx,
-        move |event| match event {
-            WorkerEvent::Publish(publication) => platform
-                .publish(&publication)
-                .map_err(|error| error.to_string()),
-            WorkerEvent::Command(outcome) => {
-                log_command_outcome(&outcome);
-                Ok(())
-            }
-            WorkerEvent::Clear { acknowledgement } => {
-                let result = platform.clear().map_err(|error| error.to_string());
-                let _ = acknowledgement.send(result);
-                Ok(())
-            }
-            WorkerEvent::ShutdownComplete => Ok(()),
-            WorkerEvent::ClearForTest => platform.clear().map_err(|error| error.to_string()),
-            WorkerEvent::Fatal(error) => Err(error),
-        },
-    )
+    let result = run_worker(inputs, command_rx, shutdown_rx, move |event| match event {
+        WorkerEvent::Publish(publication) => platform
+            .publish(&publication)
+            .map_err(|error| error.to_string()),
+        WorkerEvent::Command(outcome) => {
+            log_command_outcome(&outcome);
+            Ok(())
+        }
+        WorkerEvent::Clear { acknowledgement } => {
+            let result = platform.clear().map_err(|error| error.to_string());
+            let _ = acknowledgement.send(result);
+            Ok(())
+        }
+        WorkerEvent::ShutdownComplete => Ok(()),
+        WorkerEvent::ClearForTest => platform.clear().map_err(|error| error.to_string()),
+        WorkerEvent::Fatal(error) => Err(error),
+    })
     .await;
     signal_task.abort();
     result.map_err(Into::into)
