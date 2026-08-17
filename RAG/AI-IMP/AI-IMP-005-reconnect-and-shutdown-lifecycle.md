@@ -161,3 +161,11 @@ You MUST document any failed implementations, blockers or missing tests.
 - Live proposal reserved for the wave submission: kill/restart MPD,
   `mpc clear`, SIGTERM and SIGINT acknowledged-clear exit, artwork
   cache revalidation, and the >60-second quiet soak.
+- Round-2 review found that macOS consumed `WorkerEvent::Fatal` by exiting the
+  event loop, then returned `Ok` from `run()`; with launchd
+  `SuccessfulExit=false`, that incorrectly suppressed process-failure restart.
+  The focused follow-up preserves the fatal reason through event-loop shutdown
+  and returns it as a process error afterward. A seam test distinguishes the
+  fatal result from ordinary `ShutdownComplete`/test-hook exits. Round-2 gate:
+  72 tests passed; build, clippy with warnings denied, Linux cross-check, and
+  changed-ticket validation passed.

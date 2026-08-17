@@ -573,7 +573,14 @@ mod macos_main {
 
         let mut app = App::new(command_tx, shutdown_tx);
         event_loop.run_app(&mut app)?;
-        Ok(())
+        process_exit_result(app.fatal.take()).map_err(|error| std::io::Error::other(error).into())
+    }
+
+    fn process_exit_result(fatal: Option<String>) -> Result<(), String> {
+        match fatal {
+            Some(reason) => Err(format!("fatal worker exit: {reason}")),
+            None => Ok(()),
+        }
     }
 
     fn spawn_worker(
@@ -637,6 +644,7 @@ mod macos_main {
         pending_clear: Option<oneshot::Sender<Result<(), String>>>,
         test_clear_latched: bool,
         now_playing_cleared: bool,
+        fatal: Option<String>,
     }
 
     impl App {
@@ -652,6 +660,7 @@ mod macos_main {
                 pending_clear: None,
                 test_clear_latched: false,
                 now_playing_cleared: true,
+                fatal: None,
             }
         }
 
@@ -749,6 +758,7 @@ mod macos_main {
                 WorkerEvent::ClearForTest => self.clear_test_or_exit(event_loop),
                 WorkerEvent::Fatal(error) => {
                     tracing::error!(reason = %error, "worker failed");
+                    self.fatal = Some(error);
                     if !self.now_playing_cleared
                         && let Err(clear_error) = self.clear_now()
                     {
@@ -774,6 +784,19 @@ mod macos_main {
             _window_id: WindowId,
             _event: WindowEvent,
         ) {
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::process_exit_result;
+
+        #[test]
+        fn fatal_event_state_becomes_a_process_failure() {
+            assert!(process_exit_result(None).is_ok());
+
+            let error = process_exit_result(Some("platform clear failed".into())).unwrap_err();
+            assert_eq!(error, "fatal worker exit: platform clear failed");
         }
     }
 }

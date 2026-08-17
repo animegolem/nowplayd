@@ -39,8 +39,9 @@ Git edit date so a second review can be judged.
 ### > 600 LOC
 
 - Cargo.lock (3089 LOC)
+- packaging/nowplayd.icns (2574 LOC)
 - spike/Cargo.lock (2242 LOC)
-- src/main.rs (1348 LOC)
+- src/main.rs (1371 LOC)
 - src/artwork.rs (1131 LOC)
 - RAG/scripts/carrier.py (1060 LOC)
 - RAG/scripts/generate-index.sh (661 LOC)
@@ -52,6 +53,7 @@ Git edit date so a second review can be judged.
 - src/platform/mod.rs (468 LOC)
 - tests/artwork.rs (460 LOC)
 - src/platform/macos/mod.rs (420 LOC)
+- src/config.rs (395 LOC)
 - spike/src/main.rs (320 LOC)
 - src/mpd/mod.rs (314 LOC)
 
