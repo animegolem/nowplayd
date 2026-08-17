@@ -44,6 +44,24 @@ one clear, Firefox resumed playback; M3 logged no play/toggle
 callback and causality could not be reconstructed. Watch for
 recurrence in IMP-004/005 live runs.
 
+### AI-IMP-004 — artwork live matrix (PASSED 2026-08-17)
+
+Owner-verified with the M4 dev bundle (real library + generated
+fixtures), normal competing sessions:
+
+- Fixture and real-library covers appear within the 3 s bound;
+  metadata leads, art follows; elapsed persists after the art phase.
+- Art-less track shows no stale art; no late art from departed
+  tracks on rapid transitions; soak + natural transition survived.
+- OWNER OBSERVATION → ruled rev 0.12: visible art drop/reload on
+  every publish — pause/play flickers (souvlaki set_metadata
+  rebuilds the dict and re-queues the async image load even for an
+  identical URL) and same-album skips drop art (our ruled
+  art-less-first policy). Owner overrules the default: HOLD art
+  through transitions, swap on resolve. Cut as AI-IMP-007.
+- M4 bundle left RUNNING at the owner's pleasure (daily use) until
+  IMP-006 ships the real installer; teardown deferred by owner.
+
 ## Open (observational — cannot fail any ticket)
 
 ### Arbitration characterization (enrichment for AI-IMP-003)

@@ -4,12 +4,12 @@ tags:
   - IMP-LIST
   - Implementation
   - artwork
-kanban_status: in-progress
+kanban_status: completed
 depends_on: [AI-IMP-002, AI-IMP-003]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.8
 date_created: 2026-08-16
-date_completed:
+date_completed: 2026-08-17
 ---
 
 # AI-IMP-004-artwork-cache-pipeline
