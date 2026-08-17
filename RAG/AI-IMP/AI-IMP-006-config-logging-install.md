@@ -84,7 +84,12 @@ Before marking an item complete on the checklist MUST **stop** and
       appears at the most verbose permitted configuration; app logs
       record auth success/failure only.
 - [ ] `build-bundle.sh` produces a valid LSUIElement `.app` from
-      `cargo build --release`.
+      `cargo build --release`, INCLUDING an app icon
+      (`CFBundleIconFile` + `Resources/*.icns`) — macOS badges the
+      Now Playing card with the source app's icon, and an iconless
+      bundle renders a white placeholder dot (owner-observed on the
+      M4 dev bundle, 2026-08-17). Icon asset choice is the owner's;
+      the dev-bundle icns (fixture-art derived) is the interim.
 - [ ] `install.sh` idempotent: second run changes nothing and says
       so; update path (newer binary) replaces bundle and reloads
       agent.
