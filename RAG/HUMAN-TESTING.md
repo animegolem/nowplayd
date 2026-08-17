@@ -22,6 +22,28 @@ Owner-verified live, ruling folded into SPEC.org §8 (rev 0.5):
 - Teardown left no live agent, bundle, plist, or log (with the ~5 s launchd
   job-removal race accounted for).
 
+### AI-IMP-003 — platform adapter live matrix (PASSED round 2, 2026-08-16)
+
+Owner-verified under normal competing sessions (dev bundle, teardown
+completed):
+
+- Title / ordered artists / album / play state correct within 1 s of
+  transitions; artwork intentionally absent (IMP-004); no scrubber.
+- All five commands acted on MPD with paired receipt/result records.
+- Rev 0.10 soak: PID survived >60 s quiet + the subsequent natural
+  transition (the command-timeout failure class, now fixed by the
+  §5.1 liveness contract).
+- True clear removed the row with the process alive and controls
+  attached; two later MPD player events did NOT recreate it
+  (clear-latch repair, round 2).
+- Round-1 live gate correctly FALSIFIED the first submission
+  (command-role 60 s timeout); recorded as the origin of rev 0.10.
+
+Open observation (owner-ruled non-blocking unless it recurs): near
+one clear, Firefox resumed playback; M3 logged no play/toggle
+callback and causality could not be reconstructed. Watch for
+recurrence in IMP-004/005 live runs.
+
 ## Open (observational — cannot fail any ticket)
 
 ### Arbitration characterization (enrichment for AI-IMP-003)
