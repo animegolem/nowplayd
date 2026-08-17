@@ -7,7 +7,7 @@ edition = "2024"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 mpd_protocol = { version = "=1.0.3", features = ["async"] }
 sha2 = "0.10.9"
-souvlaki = { git = "https://github.com/animegolem/souvlaki", rev = "ba2bf7653ace6ae22880ee7eeed623fee938cacf", default-features = false, features = ["use_zbus"] }
+souvlaki = { git = "https://github.com/animegolem/souvlaki", rev = "5d237b62980b3f7f246c04bb2349c7b8b8360542", default-features = false, features = ["use_zbus"] }
 tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 url = "2.5.8"
 

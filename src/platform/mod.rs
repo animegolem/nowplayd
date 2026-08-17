@@ -11,6 +11,13 @@ use crate::{
     state::{PlaybackState, PlayerState},
 };
 
+/// Selects the native operation without weakening the full-snapshot boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublicationIntent {
+    FullMetadata,
+    PlaybackOnly,
+}
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -299,6 +306,7 @@ mod tests {
         let projected = PlatformSnapshot::from(&ArtworkPublication {
             state,
             cover_url: Some("file:///tmp/cover.png".into()),
+            intent: PublicationIntent::FullMetadata,
         });
         assert_eq!(
             projected.metadata.artist.as_deref(),
@@ -318,6 +326,7 @@ mod tests {
         let empty = PlatformSnapshot::from(&ArtworkPublication {
             state: PlayerState::default(),
             cover_url: None,
+            intent: PublicationIntent::FullMetadata,
         });
         assert_eq!(empty.metadata.artist, None);
     }

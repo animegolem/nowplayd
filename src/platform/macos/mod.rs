@@ -4,8 +4,8 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     artwork::ArtworkPublication,
     platform::{
-        PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, RemoteCommand,
-        command_from_media_event,
+        PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, PublicationIntent,
+        RemoteCommand, command_from_media_event,
     },
 };
 
@@ -96,9 +96,11 @@ where
 
     fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError> {
         let snapshot = PlatformSnapshot::from(publication);
-        // set_metadata replaces the full dictionary; playback and progress must
-        // always be restored after it (SPEC §5.2).
-        self.controls.set_metadata(&snapshot.metadata)?;
+        if publication.intent == PublicationIntent::FullMetadata {
+            // set_metadata replaces the full dictionary; playback and progress
+            // must always be restored after it (SPEC §5.2).
+            self.controls.set_metadata(&snapshot.metadata)?;
+        }
         self.controls.set_playback(snapshot.playback)
     }
 
@@ -144,8 +146,12 @@ mod tests {
     enum Call {
         Attach,
         Detach,
-        Metadata { empty: bool },
-        Playback,
+        Metadata {
+            empty: bool,
+            artwork_before: bool,
+            artwork_after: bool,
+        },
+        Playback(MediaPlayback),
         DisablePosition,
         NativeClear,
     }
@@ -156,6 +162,7 @@ mod tests {
         generation: usize,
         delayed_art_generation: Option<usize>,
         now_playing_present: bool,
+        artwork_present: bool,
     }
 
     #[derive(Clone, Default)]
@@ -166,6 +173,10 @@ mod tests {
             let mut state = self.0.lock().unwrap();
             state.delayed_art_generation = Some(state.generation);
             state.now_playing_present = true;
+        }
+
+        fn seed_artwork(&self) {
+            self.0.lock().unwrap().artwork_present = true;
         }
 
         fn complete_delayed_art(&self) {
@@ -190,15 +201,24 @@ mod tests {
         fn set_metadata(&mut self, metadata: &PlatformMetadata) -> Result<(), PlatformError> {
             let mut state = self.0.lock().unwrap();
             state.generation += 1;
+            let artwork_before = state.artwork_present;
+            // Models the pinned fork contract: a non-null replacement URL
+            // holds native art, while resolved no-art removes it now.
+            if metadata.cover_url.is_none() {
+                state.artwork_present = false;
+            }
+            let artwork_after = state.artwork_present;
             state.calls.push(Call::Metadata {
                 empty: metadata == &PlatformMetadata::default(),
+                artwork_before,
+                artwork_after,
             });
             state.now_playing_present = true;
             Ok(())
         }
 
-        fn set_playback(&mut self, _playback: MediaPlayback) -> Result<(), PlatformError> {
-            self.0.lock().unwrap().calls.push(Call::Playback);
+        fn set_playback(&mut self, playback: MediaPlayback) -> Result<(), PlatformError> {
+            self.0.lock().unwrap().calls.push(Call::Playback(playback));
             Ok(())
         }
     }
@@ -270,13 +290,109 @@ mod tests {
             .publish(&ArtworkPublication {
                 state: player,
                 cover_url: Some("file:///tmp/cover.png".into()),
+                intent: PublicationIntent::FullMetadata,
             })
             .unwrap();
 
         assert_eq!(
             state.lock().unwrap().calls,
-            [Call::Metadata { empty: false }, Call::Playback]
+            [
+                Call::Metadata {
+                    empty: false,
+                    artwork_before: false,
+                    artwork_after: false,
+                },
+                Call::Playback(MediaPlayback::Playing { progress: None })
+            ]
         );
+    }
+
+    #[test]
+    fn playback_only_uses_merge_path_and_keeps_native_artwork() {
+        let (mut adapter, controls, state) = test_adapter();
+        controls.seed_artwork();
+        let player = PlayerState {
+            playback: PlaybackState::Paused,
+            elapsed: Some(std::time::Duration::from_secs(12)),
+            ..PlayerState::default()
+        };
+
+        adapter
+            .publish(&ArtworkPublication {
+                state: player,
+                cover_url: Some("file:///tmp/cover.png".into()),
+                intent: PublicationIntent::PlaybackOnly,
+            })
+            .unwrap();
+
+        let state = state.lock().unwrap();
+        assert_eq!(
+            state.calls,
+            [Call::Playback(MediaPlayback::Paused {
+                progress: Some(souvlaki::MediaPosition(std::time::Duration::from_secs(12)))
+            })]
+        );
+        assert!(state.artwork_present);
+    }
+
+    #[test]
+    fn full_transition_holds_art_but_resolved_no_art_removes_it_synchronously() {
+        let (mut adapter, controls, state) = test_adapter();
+        controls.seed_artwork();
+        let playing = PlayerState {
+            metadata: SongMetadata {
+                title: Some("Replacement".into()),
+                ..SongMetadata::default()
+            },
+            playback: PlaybackState::Playing,
+            elapsed: Some(std::time::Duration::from_secs(1)),
+            ..PlayerState::default()
+        };
+
+        adapter
+            .publish(&ArtworkPublication {
+                state: playing.clone(),
+                cover_url: Some("file:///tmp/replacement.png".into()),
+                intent: PublicationIntent::FullMetadata,
+            })
+            .unwrap();
+        assert_eq!(
+            state.lock().unwrap().calls,
+            [
+                Call::Metadata {
+                    empty: false,
+                    artwork_before: true,
+                    artwork_after: true,
+                },
+                Call::Playback(MediaPlayback::Playing {
+                    progress: Some(souvlaki::MediaPosition(std::time::Duration::from_secs(1)))
+                })
+            ]
+        );
+
+        state.lock().unwrap().calls.clear();
+        adapter
+            .publish(&ArtworkPublication {
+                state: playing,
+                cover_url: None,
+                intent: PublicationIntent::FullMetadata,
+            })
+            .unwrap();
+        let state = state.lock().unwrap();
+        assert_eq!(
+            state.calls,
+            [
+                Call::Metadata {
+                    empty: false,
+                    artwork_before: true,
+                    artwork_after: false,
+                },
+                Call::Playback(MediaPlayback::Playing {
+                    progress: Some(souvlaki::MediaPosition(std::time::Duration::from_secs(1)))
+                })
+            ]
+        );
+        assert!(!state.artwork_present);
     }
 
     #[test]
@@ -290,7 +406,14 @@ mod tests {
         let state = state.lock().unwrap();
         assert_eq!(
             state.calls,
-            [Call::Metadata { empty: true }, Call::NativeClear]
+            [
+                Call::Metadata {
+                    empty: true,
+                    artwork_before: false,
+                    artwork_after: false,
+                },
+                Call::NativeClear
+            ]
         );
         assert!(!state.now_playing_present);
     }

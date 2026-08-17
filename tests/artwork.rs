@@ -11,6 +11,7 @@ use nowplayd::{
         BinaryCommand, BinaryResponse, CommandFailure, ConnectionConfig, LiveCommandConnection,
         MpdAddress, MpdError,
     },
+    platform::PublicationIntent,
     state::{MediaKey, OccurrenceId, PlaybackState, PlayerState},
 };
 use tempfile::TempDir;
@@ -167,6 +168,7 @@ async fn same_media_republish_retains_url_and_fetches_zero_additional_chunks() {
 
     let occurrence_change = coordinator.observe_state(state("track.flac", 2, 9));
     let publication = occurrence_change.publication.unwrap();
+    assert_eq!(publication.intent, PublicationIntent::PlaybackOnly);
     assert_eq!(publication.cover_url.as_deref(), Some(cover.as_str()));
     assert_eq!(
         publication.state.elapsed,
@@ -174,6 +176,64 @@ async fn same_media_republish_retains_url_and_fetches_zero_additional_chunks() {
     );
     assert_eq!(source.requests.len(), 1);
     assert!(!coordinator.has_pending_work());
+}
+
+#[tokio::test]
+async fn held_art_is_removed_only_when_new_media_resolves_no_art() {
+    let temp = TempDir::new().unwrap();
+    let image = png();
+    let mut source = FakeSource::new([
+        Ok(BinaryResponse {
+            total_size: Some(image.len()),
+            bytes: image,
+        }),
+        Err(no_exist("albumart")),
+        Ok(BinaryResponse {
+            total_size: None,
+            bytes: Vec::new(),
+        }),
+    ]);
+    let mut coordinator = ArtworkCoordinator::new(ArtworkCache::new(temp.path().into()));
+    coordinator.observe_state(state("a.flac", 1, 1));
+    resolve_lookup(&mut coordinator, &mut source).await;
+    let fetched = coordinator.step(&mut source).await.unwrap();
+    let art = resolve_job_if_any(&mut coordinator, fetched);
+    let held_url = art.publication.unwrap().cover_url.unwrap();
+
+    let transition = coordinator.observe_state(state("b.flac", 2, 0));
+    assert_eq!(
+        transition.publication.unwrap().cover_url.as_deref(),
+        Some(held_url.as_str())
+    );
+    resolve_lookup(&mut coordinator, &mut source).await;
+    assert!(
+        coordinator
+            .step(&mut source)
+            .await
+            .unwrap()
+            .publication
+            .is_none()
+    );
+    let resolved = coordinator.step(&mut source).await.unwrap();
+    let publication = resolved.publication.unwrap();
+    assert_eq!(publication.intent, PublicationIntent::FullMetadata);
+    assert_eq!(publication.cover_url, None);
+}
+
+#[test]
+fn occurrence_only_change_makes_no_platform_publication() {
+    let mut coordinator = ArtworkCoordinator::new(ArtworkCache::disabled());
+    let initial = state("track.flac", 1, 9);
+    coordinator.observe_state(initial.clone());
+
+    let mut occurrence_only = initial;
+    occurrence_only.occurrence = Some(OccurrenceId(2));
+    assert!(
+        coordinator
+            .observe_state(occurrence_only)
+            .publication
+            .is_none()
+    );
 }
 
 #[tokio::test]

@@ -475,6 +475,7 @@ mod tests {
                 WorkerEvent::Publish(ArtworkPublication {
                     state: refreshed,
                     cover_url: None,
+                    intent: nowplayd::platform::PublicationIntent::FullMetadata,
                 }),
             ]
         );

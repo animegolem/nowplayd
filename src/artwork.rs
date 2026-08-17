@@ -16,6 +16,7 @@ use url::Url;
 
 use crate::{
     mpd::{BinaryCommand, BinaryResponse, LiveCommandConnection, LivenessClock, MpdError},
+    platform::PublicationIntent,
     state::{MediaKey, PlayerState},
 };
 
@@ -32,6 +33,7 @@ static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 pub struct ArtworkPublication {
     pub state: PlayerState,
     pub cover_url: Option<String>,
+    pub intent: PublicationIntent,
 }
 
 /// Typed artwork failure. Only exhausted MPD transport errors are worker-fatal.
@@ -582,14 +584,14 @@ impl ArtworkCoordinator {
         }
     }
 
-    /// Observe one coherent MPD snapshot and produce its immediate full publish.
+    /// Observe one coherent MPD snapshot and select the narrowest safe publish.
     pub fn observe_state(&mut self, state: PlayerState) -> ArtworkUpdate {
+        let change = self.latest_state.diff(&state);
         let media_changed = self.current_key != state.media_key;
         self.latest_state = state;
         if media_changed {
             self.generation = self.generation.wrapping_add(1);
             self.current_key = self.latest_state.media_key.clone();
-            self.current_cover_url = None;
             self.pending = None;
 
             if let Some(key) = self.current_key.clone() {
@@ -600,8 +602,23 @@ impl ArtworkCoordinator {
             }
         }
 
+        let intent = if media_changed || change.metadata {
+            Some(PublicationIntent::FullMetadata)
+        } else if change.playback {
+            match (self.latest_state.playback, self.latest_state.elapsed) {
+                (
+                    crate::state::PlaybackState::Playing | crate::state::PlaybackState::Paused,
+                    Some(_),
+                ) => Some(PublicationIntent::PlaybackOnly),
+                _ => Some(PublicationIntent::FullMetadata),
+            }
+        } else {
+            // An occurrence change alone has no projected platform delta.
+            None
+        };
+
         ArtworkUpdate {
-            publication: Some(self.publication()),
+            publication: intent.map(|intent| self.publication(intent)),
             warning: None,
             job: None,
         }
@@ -703,29 +720,36 @@ impl ArtworkCoordinator {
             .map(|error| format!("artwork retention cleanup failed: {error}"));
         self.current_cover_url = Some(artwork.url);
         ArtworkUpdate {
-            publication: Some(self.publication()),
+            publication: Some(self.publication(PublicationIntent::FullMetadata)),
             warning,
             job: None,
         }
     }
 
-    fn apply_no_art(&self, generation: u64, key: &MediaKey) -> ArtworkUpdate {
+    fn apply_no_art(&mut self, generation: u64, key: &MediaKey) -> ArtworkUpdate {
         if !self.is_current(generation, key) {
             return ArtworkUpdate::pending();
         }
+        self.current_cover_url = None;
         ArtworkUpdate {
-            publication: Some(self.publication()),
+            publication: Some(self.publication(PublicationIntent::FullMetadata)),
             warning: None,
             job: None,
         }
     }
 
-    fn apply_failure(&self, generation: u64, key: &MediaKey, error: ArtworkError) -> ArtworkUpdate {
+    fn apply_failure(
+        &mut self,
+        generation: u64,
+        key: &MediaKey,
+        error: ArtworkError,
+    ) -> ArtworkUpdate {
         if !self.is_current(generation, key) {
             return ArtworkUpdate::pending();
         }
+        self.current_cover_url = None;
         ArtworkUpdate {
-            publication: Some(self.publication()),
+            publication: Some(self.publication(PublicationIntent::FullMetadata)),
             warning: Some(error.to_string()),
             job: None,
         }
@@ -735,10 +759,11 @@ impl ArtworkCoordinator {
         self.generation == generation && self.current_key.as_ref() == Some(key)
     }
 
-    fn publication(&self) -> ArtworkPublication {
+    fn publication(&self, intent: PublicationIntent) -> ArtworkPublication {
         ArtworkPublication {
             state: self.latest_state.clone(),
             cover_url: self.current_cover_url.clone(),
+            intent,
         }
     }
 }
@@ -903,7 +928,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn new_media_publishes_an_explicit_clear_after_prior_art() {
+    async fn new_media_holds_prior_art_until_the_replacement_resolves() {
         let temp = TempDir::new().unwrap();
         let png = encoded(ImageFormat::Png, 1, 1);
         let mut source = FakeSource {
@@ -927,7 +952,78 @@ mod tests {
 
         let clear = coordinator.observe_state(state("b.flac", 0));
 
-        assert_eq!(clear.publication.unwrap().cover_url, None);
+        let publication = clear.publication.unwrap();
+        assert!(publication.cover_url.is_some());
+        assert_eq!(publication.intent, PublicationIntent::FullMetadata);
+    }
+
+    #[test]
+    fn publication_intent_maps_playback_edges_and_suppresses_occurrence_only() {
+        let mut coordinator = ArtworkCoordinator::new(ArtworkCache::disabled());
+        let initial = state("track.flac", 1);
+        assert_eq!(
+            coordinator
+                .observe_state(initial.clone())
+                .publication
+                .unwrap()
+                .intent,
+            PublicationIntent::FullMetadata
+        );
+
+        let mut paused = initial.clone();
+        paused.playback = PlaybackState::Paused;
+        paused.elapsed = Some(std::time::Duration::from_secs(2));
+        assert_eq!(
+            coordinator
+                .observe_state(paused.clone())
+                .publication
+                .unwrap()
+                .intent,
+            PublicationIntent::PlaybackOnly
+        );
+
+        let mut resumed = paused.clone();
+        resumed.playback = PlaybackState::Playing;
+        resumed.elapsed = Some(std::time::Duration::from_secs(3));
+        assert_eq!(
+            coordinator
+                .observe_state(resumed.clone())
+                .publication
+                .unwrap()
+                .intent,
+            PublicationIntent::PlaybackOnly
+        );
+
+        let mut no_progress = resumed;
+        no_progress.elapsed = None;
+        assert_eq!(
+            coordinator
+                .observe_state(no_progress.clone())
+                .publication
+                .unwrap()
+                .intent,
+            PublicationIntent::FullMetadata
+        );
+
+        let mut stopped = no_progress.clone();
+        stopped.playback = PlaybackState::Stopped;
+        assert_eq!(
+            coordinator
+                .observe_state(stopped.clone())
+                .publication
+                .unwrap()
+                .intent,
+            PublicationIntent::FullMetadata
+        );
+
+        let mut occurrence_only = stopped;
+        occurrence_only.occurrence = Some(crate::state::OccurrenceId(44));
+        assert!(
+            coordinator
+                .observe_state(occurrence_only)
+                .publication
+                .is_none()
+        );
     }
 
     #[test]

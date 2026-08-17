@@ -88,30 +88,30 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Fork feature commit implemented, reviewed diff, new rev pinned;
+- [x] Fork feature commit implemented, reviewed diff, new rev pinned;
       `cargo check` from a clean fetch.
-- [ ] Publication intent enum with the §5.3 rev 0.13 mapping incl.
+- [x] Publication intent enum with the §5.3 rev 0.13 mapping incl.
       occurrence-only no-call rule.
-- [ ] Playback-only diff routes to the merge path; spy test asserts
+- [x] Playback-only diff routes to the merge path; spy test asserts
       no `set_metadata` call and artwork key untouched; Stopped and
       absent-progress cases route through the art-preserving full
       path (tests for Playing/Paused with progress, Stopped, absent).
-- [ ] Media-key change: continuity contract is OBSERVABLE — spy/fork
+- [x] Media-key change: continuity contract is OBSERVABLE — spy/fork
       tests assert the prior native artwork key remains present
       until replacement ("no intermediate art-less native state");
       different-art swaps on arrival; resolved no-art removes
       synchronously.
-- [ ] Stale-discard (delayed A→B) and true-clear tests still green,
+- [x] Stale-discard (delayed A→B) and true-clear tests still green,
       re-asserted against the new paths.
-- [ ] Elapsed/state correctness preserved through merge-path
+- [x] Elapsed/state correctness preserved through merge-path
       publishes (the rev 0.8 dictionary-wholesale hazard cannot
       reappear via a missed field).
-- [ ] Linux leg compiles; behavior observed and noted, not chased.
-- [ ] Live matrix proposed in the submission: pause/play with NO
+- [x] Linux leg compiles; behavior observed and noted, not chased.
+- [x] Live matrix proposed in the submission: pause/play with NO
       art drop; same-album skip with NO art drop; different-album
       skip swaps cleanly; art-less transition lingers then clears;
       soak rule applies.
-- [ ] Gates green; counts reported.
+- [x] Gates green; counts reported.
 
 ### Acceptance Criteria
 
@@ -138,3 +138,17 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- Fork commit `5d237b62980b3f7f246c04bb2349c7b8b8360542`
+  was pushed to `animegolem/souvlaki` branch
+  `codex/nowplayd-artwork-continuity` under the explicit range
+  authorization and pinned immutably here. Clean-fetch `cargo check`
+  and `cargo test --lib` passed. The fork's pre-existing doctest opens
+  its media event-loop example and does not terminate unattended, so
+  the full `cargo test` doctest phase was interrupted after the library
+  tests passed; no fork test failure was observed.
+- nowplayd gate: build passed; 51 tests passed; clippy passed with
+  warnings denied. Linux cross-target `cargo check` passed.
+- Live proposal reserved for the wave submission: pause/play and
+  same-album continuity; different-album swap; art-less linger then
+  clear; true-clear regression and soak.

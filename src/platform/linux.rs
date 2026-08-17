@@ -4,8 +4,8 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     artwork::ArtworkPublication,
     platform::{
-        PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, RemoteCommand,
-        command_from_media_event,
+        PlatformAdapter, PlatformError, PlatformMetadata, PlatformSnapshot, PublicationIntent,
+        RemoteCommand, command_from_media_event,
     },
 };
 
@@ -33,8 +33,10 @@ impl LinuxPlatform {
 impl PlatformAdapter for LinuxPlatform {
     fn publish(&mut self, publication: &ArtworkPublication) -> Result<(), PlatformError> {
         let snapshot = PlatformSnapshot::from(publication);
-        self.controls
-            .set_metadata(snapshot.metadata.as_souvlaki())?;
+        if publication.intent == PublicationIntent::FullMetadata {
+            self.controls
+                .set_metadata(snapshot.metadata.as_souvlaki())?;
+        }
         self.controls.set_playback(snapshot.playback)?;
         Ok(())
     }
