@@ -95,6 +95,7 @@ pub enum MpdError {
         status_song_id: Option<u64>,
         current_song_id: Option<u64>,
     },
+    SnapshotCoherenceExhausted,
 }
 
 impl fmt::Display for MpdError {
@@ -123,6 +124,9 @@ impl fmt::Display for MpdError {
                 f,
                 "MPD snapshot changed during refresh: status songid {status_song_id:?}, currentsong Id {current_song_id:?}"
             ),
+            Self::SnapshotCoherenceExhausted => {
+                f.write_str("MPD snapshot remained incoherent for three refresh attempts")
+            }
         }
     }
 }
@@ -141,6 +145,20 @@ impl MpdError {
     pub fn is_transport(&self) -> bool {
         matches!(self, Self::Transport(_))
     }
+
+    /// ACK is the sole failure class that leaves the paired epoch healthy.
+    pub fn class(&self) -> FailureClass {
+        match self {
+            Self::Command(_) => FailureClass::CommandAck,
+            _ => FailureClass::ConnectionFault,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureClass {
+    CommandAck,
+    ConnectionFault,
 }
 
 impl From<MpdProtocolError> for MpdError {

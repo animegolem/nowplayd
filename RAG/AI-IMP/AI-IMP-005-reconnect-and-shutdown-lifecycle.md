@@ -76,55 +76,55 @@ Before marking an item complete on the checklist MUST **stop** and
 **tested**?
 </CRITICAL_RULE>
 
-- [ ] Supervisor state machine (connected / reconnecting / shutting
+- [x] Supervisor state machine (connected / reconnecting / shutting
       down): paired transactional establish (no Connected until both
       + initial refresh); unit tests with fake connections for each
       transition.
-- [ ] Error classification tests: transport failure on either role →
+- [x] Error classification tests: transport failure on either role →
       teardown+clear+backoff; command ACK error → logged, pair stays
       up, no clear.
-- [ ] Backoff 1 s → 30 s cap with jitter; test asserts the schedule
+- [x] Backoff 1 s → 30 s cap with jitter; test asserts the schedule
       shape AND that reset requires the 30 s healthy interval (a
       connect-then-immediate-drop keeps escalating).
-- [ ] Reconnect cache reuse revalidates cached art (missing /
+- [x] Reconnect cache reuse revalidates cached art (missing /
       undecodable → refetch path from AI-IMP-004); fake test.
-- [ ] `clear()` on disconnect, before the first backoff sleep (test
+- [x] `clear()` on disconnect, before the first backoff sleep (test
       asserts ordering).
-- [ ] `clear()` on no-current-song while connected; republish on next
+- [x] `clear()` on no-current-song while connected; republish on next
       song (fake-connection test).
-- [ ] Reconnect performs full refresh + republish incl. artwork
+- [x] Reconnect performs full refresh + republish incl. artwork
       re-publish from cache (media key unchanged AND revalidated per
       §5.3; otherwise refetch).
-- [ ] SIGTERM/SIGINT → `clear()` → clean exit code 0; works under the
+- [x] SIGTERM/SIGINT → `clear()` → clean exit code 0; works under the
       winit main-thread structure.
-- [ ] Typed classification preserved through every seam per §5.5
+- [x] Typed classification preserved through every seam per §5.5
       rev 0.13 (no stringification before the supervisor; ACK =
       healthy-pair only; malformed-mapping tears down; mutating
       transport failure emits outcome AND lifecycle fault).
-- [ ] Refresh incoherence bounded per §5.1 rev 0.13: exactly three
+- [x] Refresh incoherence bounded per §5.1 rev 0.13: exactly three
       attempts → `SnapshotCoherenceExhausted` → teardown/clear/
       backoff; fixture asserts count and routing.
-- [ ] Acknowledged production clear (one-shot ack) awaited before
+- [x] Acknowledged production clear (one-shot ack) awaited before
       first backoff sleep and before clean exit; SIGTERM/SIGINT
       route through it, exit 0; clear failure terminal and honest.
-- [ ] `invalidate_epoch()` on disconnect/no-song/shutdown; stale job
+- [x] `invalidate_epoch()` on disconnect/no-song/shutdown; stale job
       completions discarded; reconnect re-runs cache
       lookup/decode; idle task join handle owned and
       aborted/awaited on every teardown (test: no stale idle role
       after reconnect).
-- [ ] Deterministic timing per §5.5 rev 0.13: injected
+- [x] Deterministic timing per §5.5 rev 0.13: injected
       clock/sleeper/RNG; 1,2,4,8,16,30 cap with jitter
       [nominal/2, nominal]; reset only on coherent refresh ≥30 s
       connected; bounds asserted without wall-clock sleeps.
-- [ ] Runtime inputs injected (ConnectionConfig, cache root,
+- [x] Runtime inputs injected (ConnectionConfig, cache root,
       event/log sink) with call-site defaults; interim stderr sink
       retained for 006 to swap.
-- [ ] All transitions logged with reason (FR-8).
-- [ ] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
+- [x] All transitions logged with reason (FR-8).
+- [x] Live checks PROPOSED IN THE SUBMISSION (HUMAN-TESTING is the
       Review Lead's): kill mpd (one true clear before backoff),
       restart (returns unaided with revalidated art), `mpc clear`,
       SIGTERM/SIGINT acknowledged clear + exit 0.
-- [ ] Gates green; counts reported.
+- [x] Gates green; counts reported.
 
 ### Acceptance Criteria
 
@@ -148,3 +148,16 @@ This section is filled out post work as you fill out the checklists.
 You SHOULD document any issues encountered and resolved during the sprint.
 You MUST document any failed implementations, blockers or missing tests.
 -->
+
+- Implemented the paired supervisor with typed command/idle/artwork
+  faults, acknowledged main-thread clear, joined idle teardown,
+  deterministic backoff policy, signal shutdown, and conservative
+  one-clear latching across repeated failed reconnects.
+- Existing cache corruption coverage proves reconnect-style reuse
+  re-decodes before publication; epoch invalidation coverage proves
+  old blocking completions are deterministically stale.
+- Gate: build passed; 62 tests passed; clippy passed with warnings
+  denied. No wall-clock sleeps are used in lifecycle tests.
+- Live proposal reserved for the wave submission: kill/restart MPD,
+  `mpc clear`, SIGTERM and SIGINT acknowledged-clear exit, artwork
+  cache revalidation, and the >60-second quiet soak.

@@ -3,11 +3,14 @@
 use std::{error::Error, fmt, future::Future};
 
 use souvlaki::{MediaControlEvent, MediaMetadata, MediaPlayback, MediaPosition};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::oneshot,
+};
 
 use crate::{
     artwork::ArtworkPublication,
-    mpd::{CommandConnection, LiveCommandConnection, LivenessClock, MpdError},
+    mpd::{CommandConnection, FailureClass, LiveCommandConnection, LivenessClock, MpdError},
     state::{PlaybackState, PlayerState},
 };
 
@@ -57,18 +60,39 @@ pub enum CommandOutcome {
     Succeeded(RemoteCommand),
     Failed {
         command: RemoteCommand,
+        class: FailureClass,
         error: String,
     },
 }
 
 /// Events sent from the Tokio worker to the platform owner.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum WorkerEvent {
     Publish(ArtworkPublication),
     Command(CommandOutcome),
+    Clear {
+        acknowledgement: oneshot::Sender<Result<(), String>>,
+    },
+    ShutdownComplete,
     ClearForTest,
     Fatal(String),
 }
+
+impl PartialEq for WorkerEvent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Publish(left), Self::Publish(right)) => left == right,
+            (Self::Command(left), Self::Command(right)) => left == right,
+            (Self::ClearForTest, Self::ClearForTest) => true,
+            (Self::ShutdownComplete, Self::ShutdownComplete) => true,
+            (Self::Fatal(left), Self::Fatal(right)) => left == right,
+            (Self::Clear { .. }, Self::Clear { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for WorkerEvent {}
 
 /// Owned projection used by every platform backend.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -160,20 +184,16 @@ pub trait PlatformAdapter {
 
 /// Async command target used to test the command-to-refresh transaction.
 pub trait RemoteCommandTarget {
-    type Error: fmt::Display;
+    fn execute(&mut self, command: RemoteCommand) -> impl Future<Output = Result<(), MpdError>>;
 
-    fn execute(&mut self, command: RemoteCommand) -> impl Future<Output = Result<(), Self::Error>>;
-
-    fn refresh(&mut self) -> impl Future<Output = Result<PlayerState, Self::Error>>;
+    fn refresh(&mut self) -> impl Future<Output = Result<PlayerState, MpdError>>;
 }
 
 impl<IO> RemoteCommandTarget for CommandConnection<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Error = MpdError;
-
-    async fn execute(&mut self, command: RemoteCommand) -> Result<(), Self::Error> {
+    async fn execute(&mut self, command: RemoteCommand) -> Result<(), MpdError> {
         match command {
             RemoteCommand::Toggle => self.toggle().await,
             RemoteCommand::Play => self.play().await,
@@ -183,7 +203,7 @@ where
         }
     }
 
-    async fn refresh(&mut self) -> Result<PlayerState, Self::Error> {
+    async fn refresh(&mut self) -> Result<PlayerState, MpdError> {
         CommandConnection::refresh(self).await
     }
 }
@@ -192,9 +212,7 @@ impl<C> RemoteCommandTarget for LiveCommandConnection<C>
 where
     C: LivenessClock,
 {
-    type Error = MpdError;
-
-    async fn execute(&mut self, command: RemoteCommand) -> Result<(), Self::Error> {
+    async fn execute(&mut self, command: RemoteCommand) -> Result<(), MpdError> {
         match command {
             RemoteCommand::Toggle => self.toggle().await,
             RemoteCommand::Play => self.play().await,
@@ -204,7 +222,7 @@ where
         }
     }
 
-    async fn refresh(&mut self) -> Result<PlayerState, Self::Error> {
+    async fn refresh(&mut self) -> Result<PlayerState, MpdError> {
         LiveCommandConnection::refresh(self).await
     }
 }
@@ -217,27 +235,56 @@ pub async fn handle_remote_command<T, F>(
     target: &mut T,
     command: RemoteCommand,
     emit: &mut F,
-) -> Result<Option<PlayerState>, String>
+) -> Result<Option<PlayerState>, RemoteCommandError>
 where
     T: RemoteCommandTarget,
     F: FnMut(WorkerEvent) -> Result<(), String>,
 {
-    emit(WorkerEvent::Command(CommandOutcome::Received(command)))?;
+    emit(WorkerEvent::Command(CommandOutcome::Received(command)))
+        .map_err(RemoteCommandError::Emit)?;
 
     if let Err(error) = target.execute(command).await {
+        let class = error.class();
         emit(WorkerEvent::Command(CommandOutcome::Failed {
             command,
+            class,
             error: error.to_string(),
-        }))?;
-        return Ok(None);
+        }))
+        .map_err(RemoteCommandError::Emit)?;
+        return match class {
+            FailureClass::CommandAck => Ok(None),
+            FailureClass::ConnectionFault => Err(RemoteCommandError::Mpd(error)),
+        };
     }
 
-    emit(WorkerEvent::Command(CommandOutcome::Succeeded(command)))?;
-    let state = target
-        .refresh()
-        .await
-        .map_err(|error| format!("refresh after {command} failed: {error}"))?;
+    emit(WorkerEvent::Command(CommandOutcome::Succeeded(command)))
+        .map_err(RemoteCommandError::Emit)?;
+    let state = target.refresh().await.map_err(RemoteCommandError::Mpd)?;
     Ok(Some(state))
+}
+
+#[derive(Debug)]
+pub enum RemoteCommandError {
+    Mpd(MpdError),
+    Emit(String),
+}
+
+impl fmt::Display for RemoteCommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Mpd(error) => write!(f, "remote command MPD fault: {error}"),
+            Self::Emit(error) => write!(f, "remote command event sink failed: {error}"),
+        }
+    }
+}
+
+impl Error for RemoteCommandError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Mpd(error) => Some(error),
+            Self::Emit(_) => None,
+        }
+    }
 }
 
 pub(crate) fn command_from_media_event(event: &MediaControlEvent) -> Option<RemoteCommand> {
@@ -256,7 +303,10 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
-    use crate::state::{OccurrenceId, SongMetadata};
+    use crate::{
+        mpd::CommandFailure,
+        state::{OccurrenceId, SongMetadata},
+    };
 
     #[test]
     fn only_the_five_ruled_events_cross_the_bridge() {
@@ -333,19 +383,17 @@ mod tests {
 
     struct FakeTarget {
         calls: Vec<&'static str>,
-        execute_results: VecDeque<Result<(), &'static str>>,
+        execute_results: VecDeque<Result<(), MpdError>>,
         refreshed: PlayerState,
     }
 
     impl RemoteCommandTarget for FakeTarget {
-        type Error = &'static str;
-
-        async fn execute(&mut self, _command: RemoteCommand) -> Result<(), Self::Error> {
+        async fn execute(&mut self, _command: RemoteCommand) -> Result<(), MpdError> {
             self.calls.push("execute");
             self.execute_results.pop_front().unwrap_or(Ok(()))
         }
 
-        async fn refresh(&mut self) -> Result<PlayerState, Self::Error> {
+        async fn refresh(&mut self) -> Result<PlayerState, MpdError> {
             self.calls.push("refresh");
             Ok(self.refreshed.clone())
         }
@@ -387,7 +435,12 @@ mod tests {
     async fn command_failure_emits_no_refresh_or_optimistic_publish() {
         let mut target = FakeTarget {
             calls: Vec::new(),
-            execute_results: VecDeque::from([Err("No next song")]),
+            execute_results: VecDeque::from([Err(MpdError::Command(CommandFailure {
+                code: 9,
+                command_index: 0,
+                command: Some("next".into()),
+                message: "No next song".into(),
+            }))]),
             refreshed: PlayerState::default(),
         };
         let mut events = Vec::new();
@@ -406,7 +459,8 @@ mod tests {
                 WorkerEvent::Command(CommandOutcome::Received(RemoteCommand::Next)),
                 WorkerEvent::Command(CommandOutcome::Failed {
                     command: RemoteCommand::Next,
-                    error: "No next song".into(),
+                    class: FailureClass::CommandAck,
+                    error: "MPD command rejected (code 9): No next song".into(),
                 }),
             ]
         );

@@ -8,7 +8,7 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 mpd_protocol = { version = "=1.0.3", features = ["async"] }
 sha2 = "0.10.9"
 souvlaki = { git = "https://github.com/animegolem/souvlaki", rev = "5d237b62980b3f7f246c04bb2349c7b8b8360542", default-features = false, features = ["use_zbus"] }
-tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 url = "2.5.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]

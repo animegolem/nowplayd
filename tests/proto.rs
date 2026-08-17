@@ -147,6 +147,30 @@ async fn mismatched_snapshot_is_discarded_and_retried() {
 }
 
 #[tokio::test]
+async fn snapshot_incoherence_stops_after_exactly_three_attempts() {
+    let io = scripted_server(vec![
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-mismatch.txt"),
+        ),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-mismatch.txt"),
+        ),
+        (
+            REFRESH_REQUEST,
+            include_str!("fixtures/snapshot-mismatch.txt"),
+        ),
+    ]);
+    let mut connection = CommandConnection::from_io(io).await.unwrap();
+
+    assert!(matches!(
+        connection.refresh().await.unwrap_err(),
+        MpdError::SnapshotCoherenceExhausted
+    ));
+}
+
+#[tokio::test]
 async fn command_ack_is_typed_and_does_not_become_transport_failure() {
     let io = scripted_server(vec![
         ("next\n", include_str!("fixtures/ack.txt")),
@@ -422,21 +446,22 @@ async fn ambiguous_mutating_failure_is_logged_and_never_reissued() {
     let mut connection = LiveCommandConnection::connect(config).await.unwrap();
     let mut emitted = Vec::new();
 
-    assert!(
-        handle_remote_command(&mut connection, RemoteCommand::Next, &mut |event| {
-            emitted.push(event);
-            Ok(())
-        })
-        .await
-        .unwrap()
-        .is_none()
-    );
+    let result = handle_remote_command(&mut connection, RemoteCommand::Next, &mut |event| {
+        emitted.push(event);
+        Ok(())
+    })
+    .await;
+    assert!(matches!(
+        result,
+        Err(nowplayd::platform::RemoteCommandError::Mpd(_))
+    ));
     assert_eq!(
         emitted,
         [
             WorkerEvent::Command(CommandOutcome::Received(RemoteCommand::Next)),
             WorkerEvent::Command(CommandOutcome::Failed {
                 command: RemoteCommand::Next,
+                class: nowplayd::mpd::FailureClass::ConnectionFault,
                 error: "MPD transport error: IO error".into(),
             }),
         ]

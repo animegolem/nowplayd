@@ -156,10 +156,16 @@ where
             return Ok(());
         }
 
-        let ping = self.connection_mut()?.ping().await;
-        if ping.is_ok() {
-            self.mark_used();
-            return Ok(());
+        match self.connection_mut()?.ping().await {
+            Ok(()) => {
+                self.mark_used();
+                return Ok(());
+            }
+            Err(error) if !error.is_transport() => {
+                self.mark_used();
+                return Err(error);
+            }
+            Err(_) => {}
         }
 
         self.connection = None;

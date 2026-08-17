@@ -56,8 +56,8 @@ pub enum ArtworkError {
 }
 
 impl ArtworkError {
-    pub fn is_transport(&self) -> bool {
-        matches!(self, Self::Mpd(error) if error.is_transport())
+    pub fn is_connection_fault(&self) -> bool {
+        matches!(self, Self::Mpd(error) if error.class() == crate::mpd::FailureClass::ConnectionFault)
     }
 }
 
@@ -628,6 +628,15 @@ impl ArtworkCoordinator {
         self.pending.is_some()
     }
 
+    /// End one connected epoch without attempting to cancel blocking jobs.
+    pub fn invalidate_epoch(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.current_key = None;
+        self.latest_state = PlayerState::default();
+        self.current_cover_url = None;
+        self.pending = None;
+    }
+
     /// Perform exactly one cache-completion or MPD-chunk scheduling turn.
     pub async fn step<S>(&mut self, source: &mut S) -> Result<ArtworkUpdate, ArtworkError>
     where
@@ -664,7 +673,7 @@ impl ArtworkCoordinator {
                 Ok(FetchStep::Complete(None)) => {
                     Ok(self.apply_no_art(fetch.generation, &fetch.key))
                 }
-                Err(error) if error.is_transport() => Err(error),
+                Err(error) if error.is_connection_fault() => Err(error),
                 Err(error) => Ok(self.apply_failure(fetch.generation, &fetch.key, error)),
             },
         }
@@ -1043,6 +1052,27 @@ mod tests {
 
         assert!(stale.publication.is_none());
         assert_eq!(coordinator.current_key, Some(MediaKey("b.flac".into())));
+        assert_eq!(coordinator.current_cover_url, None);
+    }
+
+    #[test]
+    fn epoch_invalidation_discards_pending_and_late_completions() {
+        let temp = TempDir::new().unwrap();
+        let mut coordinator = ArtworkCoordinator::new(ArtworkCache::new(temp.path().into()));
+        coordinator.observe_state(state("a.flac", 0));
+        let old_generation = coordinator.generation;
+        let old_key = MediaKey("a.flac".into());
+        let old_art = coordinator
+            .cache
+            .store(&old_key, &encoded(ImageFormat::Png, 1, 1))
+            .unwrap();
+
+        coordinator.invalidate_epoch();
+        let stale = coordinator.apply_artwork(old_generation, &old_key, old_art);
+
+        assert!(stale.publication.is_none());
+        assert!(!coordinator.has_pending_work());
+        assert_eq!(coordinator.current_key, None);
         assert_eq!(coordinator.current_cover_url, None);
     }
 

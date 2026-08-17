@@ -58,14 +58,18 @@ where
         })
     }
 
-    /// Refresh until `status.songid` and `currentsong.Id` describe one song.
+    /// Retry incoherent grouped snapshots exactly three times.
     pub async fn refresh(&mut self) -> Result<PlayerState> {
-        loop {
+        for attempt in 0..3 {
             match self.refresh_once().await {
-                Err(MpdError::IncoherentSnapshot { .. }) => continue,
+                Err(MpdError::IncoherentSnapshot { .. }) if attempt < 2 => continue,
+                Err(MpdError::IncoherentSnapshot { .. }) => {
+                    return Err(MpdError::SnapshotCoherenceExhausted);
+                }
                 result => return result,
             }
         }
+        unreachable!("three-attempt refresh loop always returns")
     }
 
     pub async fn toggle(&mut self) -> Result<()> {
