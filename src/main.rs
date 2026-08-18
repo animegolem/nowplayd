@@ -678,6 +678,7 @@ mod macos_main {
             };
             if let Err(error) = adapter.publish(&publication) {
                 tracing::error!(reason = %error, "platform publish failed");
+                self.fatal = Some(format!("platform publish failed: {error}"));
                 event_loop.exit();
             } else {
                 self.now_playing_cleared = false;
@@ -719,6 +720,7 @@ mod macos_main {
                 ),
                 Err(error) => {
                     tracing::error!(reason = %error, "platform clear failed");
+                    self.fatal = Some(format!("platform clear failed: {error}"));
                     event_loop.exit();
                 }
             }
@@ -734,6 +736,7 @@ mod macos_main {
                 Ok(adapter) => self.adapter = Some(adapter),
                 Err(error) => {
                     tracing::error!(reason = %error, "platform attach failed");
+                    self.fatal = Some(format!("platform attach failed: {error}"));
                     event_loop.exit();
                     return;
                 }
