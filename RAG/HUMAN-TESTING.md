@@ -62,6 +62,40 @@ fixtures), normal competing sessions:
 - M4 bundle left RUNNING at the owner's pleasure (daily use) until
   IMP-006 ships the real installer; teardown deferred by owner.
 
+## Pending — Wave 4 combined live matrix (AI-IMP-007 + 005 + 006)
+
+Mandatory-pass baseline for closing all three tickets, run against the
+REAL installed bundle from main at `0253e49`. This session also retires
+the running M4 dev bundle (its teardown is step 1). Preconditions:
+normal competing Now Playing sessions are fine (equivalence ruling,
+IMP-001); MPD running with a mixed queue including same-album
+neighbors, a different-album track, and at least one no-art track.
+
+1. Install: `./install.sh` from main; confirm the M4 dev bundle is
+   retired in the same session, the card shows the real icon (no white
+   placeholder dot), metadata/art appear, and all five remote commands
+   act on MPD.
+2. Idempotence: re-run `./install.sh` unchanged — confirm the daemon
+   PID is NOT restarted and the script reports no changes. Then apply
+   a changed update (any rebuild) and confirm exactly one controlled
+   reload.
+3. Continuity (§5.3): pause/play with art — no art flicker. Move to a
+   same-album track, then a different-album track — no intermediate
+   art-less card; replacement swaps only when ready. Move to a no-art
+   track — old art lingers briefly, then the card goes art-less.
+4. Races: change tracks rapidly during artwork fetch — no
+   departed-track art may publish. `mpc clear` — card disappears; start
+   a song — clean republish.
+5. Lifecycle (§5.5): kill MPD — card clears before retry begins.
+   Restart MPD — card returns unaided (no nowplayd restart), cached
+   art revalidated. Hold a >60 s quiet soak while connected.
+6. Shutdown: SIGTERM the daemon — acknowledged clear, exit 0, and NO
+   launchd relaunch (SuccessfulExit=false). Logout/login — agent
+   returns on its own.
+7. Uninstall: `./uninstall.sh` — bundle, plist, agent, cache, and Now
+   Playing entry all gone; config preserved (log is preserved too, by
+   design). Run it again — clean no-op.
+
 ## Open (observational — cannot fail any ticket)
 
 ### Arbitration characterization (enrichment for AI-IMP-003)
