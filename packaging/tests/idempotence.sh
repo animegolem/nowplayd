@@ -41,11 +41,24 @@ if grep -q '^bootout$' "$log"; then
   exit 1
 fi
 
+installed_plist="$test_home/Library/LaunchAgents/io.github.animegolem.nowplayd.plist"
+plutil -insert ProgramArguments.1 -string /usr/local/bin/false "$installed_plist"
+mv "$state" "$test_root/booted-out-state"
+run_install >"$test_root/repair.out" 2>"$test_root/repair.err"
+[[ "$(grep -c '^bootstrap$' "$log")" == "2" ]]
+if grep -q '^bootout$' "$log"; then
+  echo "idempotence.sh: unloaded repair tried to boot out an absent agent" >&2
+  exit 1
+fi
+[[ "$(plutil -extract ProgramArguments raw -o - "$installed_plist")" == "1" ]]
+[[ "$(plutil -extract ProgramArguments.0 raw -o - "$installed_plist")" == \
+  "$test_home/Applications/nowplayd.app/Contents/MacOS/nowplayd" ]]
+
 /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 999' \
   "$test_home/Applications/nowplayd.app/Contents/Info.plist"
 run_install >"$test_root/update.out" 2>"$test_root/update.err"
 [[ "$(grep -c '^bootout$' "$log")" == "1" ]]
-[[ "$(grep -c '^bootstrap$' "$log")" == "2" ]]
+[[ "$(grep -c '^bootstrap$' "$log")" == "3" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$test_home/Applications/nowplayd.app/Contents/Info.plist")" == "1" ]]
 
 mkdir -p "$test_home/Library/Caches/nowplayd"
@@ -56,4 +69,4 @@ grep -q 'nothing to remove' "$test_root/uninstall-again.out"
 [[ ! -e "$test_home/Applications/nowplayd.app" ]]
 [[ ! -e "$test_home/Library/LaunchAgents/io.github.animegolem.nowplayd.plist" ]]
 [[ ! -e "$test_home/Library/Caches/nowplayd" ]]
-echo "idempotence.sh: no-op install, changed update, permissions, and double uninstall passed"
+echo "idempotence.sh: no-op install, unloaded malformed-plist repair, changed update, permissions, and double uninstall passed"

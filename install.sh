@@ -53,6 +53,16 @@ enforce_config_permissions() {
   fi
 }
 
+json_quote() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '"%s"' "$value"
+}
+
 validate_targets
 if [[ "${1:-}" == "--validate-only" ]]; then
   echo "install.sh: targets validated"
@@ -70,12 +80,17 @@ trap cleanup EXIT
 
 stage_app="$stage_root/nowplayd.app"
 stage_plist="$stage_root/$label.plist"
+binary_target="$app_target/Contents/MacOS/nowplayd"
+program_arguments_json="[$(json_quote "$binary_target")]"
 "$repo_root/packaging/build-bundle.sh" "$stage_app"
 cp "$repo_root/packaging/$label.plist.tmpl" "$stage_plist"
-plutil -replace ProgramArguments.0 -string \
-  "$app_target/Contents/MacOS/nowplayd" "$stage_plist"
+plutil -replace ProgramArguments -json "$program_arguments_json" "$stage_plist"
 plutil -replace StandardErrorPath -string "$log_target" "$stage_plist"
 plutil -lint "$stage_plist" >/dev/null
+program_argument_count="$(plutil -extract ProgramArguments raw -o - "$stage_plist")"
+program_argument="$(plutil -extract ProgramArguments.0 raw -o - "$stage_plist")"
+[[ "$program_argument_count" == "1" && "$program_argument" == "$binary_target" ]] \
+  || die "staged plist ProgramArguments does not exactly match the app binary"
 
 enforce_config_permissions
 "$stage_app/Contents/MacOS/nowplayd" --check-config
