@@ -5,7 +5,7 @@ tags:
   - Implementation
   - packaging
   - config
-kanban_status: planned
+kanban_status: completed
 depends_on: [AI-IMP-001, AI-IMP-003, AI-IMP-004, AI-IMP-005]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.75
@@ -169,3 +169,11 @@ You MUST document any failed implementations, blockers or missing tests.
 - The macOS shipping/live matrix is proposed in the submission rather than
   recorded here; `RAG/HUMAN-TESTING.md` remains untouched for the Review Lead
   and owner.
+
+
+## Closure (2026-08-19)
+
+Merged to main (`0253e49` wave tip; installer argv repair `1466f43`).
+Owner ruled a PROVISIONAL live pass sufficient to close during
+development; the full Wave 4 combined matrix is a mandatory pre-1.0
+blocker recorded in RAG/HUMAN-TESTING.md.

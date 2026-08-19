@@ -62,10 +62,40 @@ fixtures), normal competing sessions:
 - M4 bundle left RUNNING at the owner's pleasure (daily use) until
   IMP-006 ships the real installer; teardown deferred by owner.
 
-## Pending — Wave 4 combined live matrix (AI-IMP-007 + 005 + 006)
+## 1.0 BLOCKERS — deferred mandatory gates (owner ruling, 2026-08-19)
 
-Mandatory-pass baseline for closing all three tickets, run against the
-REAL installed bundle from main at `0253e49`. This session also retires
+The owner ruled development moves on without hard-QA passes of the
+full matrices below; they REMAIN mandatory and must be run (in full,
+against the then-current build) before any 1.0 tag. Nothing ships as
+1.0 on the strength of the provisional passes recorded above/below.
+
+### Wave 4 combined live matrix — PROVISIONAL PASS (2026-08-19)
+
+Owner-verified informally on the real installed bundle (main
+`1466f43`): install works after the round-4 argv repair, card shows
+metadata/art/icon (no white badge), "all the features work" incl.
+remote commands and artwork continuity in normal use; M4 dev bundle
+retired in-session (process killed, bundle removed). Round-4 origin:
+step 1 FALSIFIED the first install live — plutil array-index quirk
+left a two-argument plist and a throttled crash loop; fixed and
+regression-tested in `1466f43`.
+
+NOT yet exercised rigorously (the pre-1.0 re-run below covers them):
+idempotent re-install / changed-update reload count, rapid-skip
+races, mpc clear, kill/restart MPD + >60 s soak, SIGTERM no-relaunch,
+logout/login persistence, double uninstall.
+
+### Pre-1.0 full re-run (the blocker)
+
+Run the complete Wave 4 matrix below, unmodified, plus any matrix
+rows added by later waves, against the release-candidate build. This
+re-run happens regardless of interim passes — it would be required
+at 1.0 even if today's run had been exhaustive.
+
+## Wave 4 combined live matrix (reference protocol)
+
+Protocol preserved for the pre-1.0 re-run (originally the Wave 4
+close gate; provisionally passed 2026-08-19, see above). This session also retires
 the running M4 dev bundle (its teardown is step 1). Preconditions:
 normal competing Now Playing sessions are fine (equivalence ruling,
 IMP-001); MPD running with a mixed queue including same-album

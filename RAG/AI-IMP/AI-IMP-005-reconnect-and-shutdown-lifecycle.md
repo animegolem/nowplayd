@@ -4,7 +4,7 @@ tags:
   - IMP-LIST
   - Implementation
   - lifecycle
-kanban_status: planned
+kanban_status: completed
 depends_on: [AI-IMP-002, AI-IMP-003, AI-IMP-004]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.8
@@ -169,3 +169,11 @@ You MUST document any failed implementations, blockers or missing tests.
   fatal result from ordinary `ShutdownComplete`/test-hook exits. Round-2 gate:
   72 tests passed; build, clippy with warnings denied, Linux cross-check, and
   changed-ticket validation passed.
+
+
+## Closure (2026-08-19)
+
+Merged to main (`0253e49` wave tip; installer argv repair `1466f43`).
+Owner ruled a PROVISIONAL live pass sufficient to close during
+development; the full Wave 4 combined matrix is a mandatory pre-1.0
+blocker recorded in RAG/HUMAN-TESTING.md.
