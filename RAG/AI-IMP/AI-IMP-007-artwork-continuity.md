@@ -10,7 +10,7 @@ depends_on: [AI-IMP-004]
 parent_epic: [[AI-EPIC-001-mpd-macos-now-playing-bridge]]
 confidence_score: 0.75
 date_created: 2026-08-17
-date_completed:
+date_completed: 2026-08-19
 ---
 
 # AI-IMP-007-artwork-continuity
